@@ -4,3 +4,6 @@ django-cors-headers
 djangorestframework-simplejwt
 gunicorn
 whitenoise[brotli]
+psycopg2-binary
+dj-database-url
+-
