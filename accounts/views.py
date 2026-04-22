@@ -8,6 +8,8 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
 from .models import OTPVerification
 
+from django.conf import settings
+
 def _send_otp_email(user):
     otp = str(random.randint(100000, 999999))
     OTPVerification.objects.update_or_create(
@@ -15,13 +17,16 @@ def _send_otp_email(user):
         defaults={'otp': otp, 'is_verified': False}
     )
     
-    send_mail(
-        'Your Verification Code',
-        f'Your verification code is {otp}. It will expire in 10 minutes.',
-        'noreply@chessapp.com',
-        [user.email],
-        fail_silently=False,
-    )
+    try:
+        send_mail(
+            'Your Verification Code',
+            f'Your verification code is {otp}. It will expire in 10 minutes.',
+            settings.DEFAULT_FROM_EMAIL,
+            [user.email],
+            fail_silently=True, # Prevent 500 errors if email fails
+        )
+    except Exception as e:
+        print(f"Error sending email: {e}")
 
 @api_view(['POST'])
 def signup(request):
