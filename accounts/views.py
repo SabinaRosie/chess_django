@@ -1,12 +1,27 @@
-from django.shortcuts import render
-
-# Create your views here.
-from django.contrib.auth.models import User
+import random
+from django.core.mail import send_mail
 from django.contrib.auth import authenticate
-from rest_framework.decorators import api_view
+from django.contrib.auth.models import User
+from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.permissions import IsAuthenticated
+from .models import OTPVerification
 
+def _send_otp_email(user):
+    otp = str(random.randint(100000, 999999))
+    OTPVerification.objects.update_or_create(
+        user=user,
+        defaults={'otp': otp, 'is_verified': False}
+    )
+    
+    send_mail(
+        'Your Verification Code',
+        f'Your verification code is {otp}. It will expire in 10 minutes.',
+        'noreply@chessapp.com',
+        [user.email],
+        fail_silently=False,
+    )
 
 @api_view(['POST'])
 def signup(request):
@@ -18,46 +33,51 @@ def signup(request):
         return Response({"error": "All fields required"}, status=400)
 
     if User.objects.filter(username=username).exists():
-        return Response({"error": "User already exists"}, status=400)
+        return Response({"error": "Username already exists"}, status=400)
+    
+    if User.objects.filter(email=email).exists():
+        return Response({"error": "Email already exists"}, status=400)
 
+    # Create inactive user
     user = User.objects.create_user(
         username=username,
         email=email,
-        password=password
+        password=password,
+        is_active=False
     )
 
-    refresh = RefreshToken.for_user(user)
+    _send_otp_email(user)
 
     return Response({
-        "message": "User created successfully",
-        "access": str(refresh.access_token),
-        "refresh": str(refresh),
+        "message": "User created. Please verify your email with the OTP sent.",
+        "step": "verify"
     })
-
 
 @api_view(['POST'])
 def login(request):
     username = request.data.get('username')
     password = request.data.get('password')
 
+    # Note: authenticate() checks for is_active by default and returns None if False
     user = authenticate(username=username, password=password)
 
     if user is None:
+        # Check if user exists but is inactive
+        try:
+            temp_user = User.objects.get(username=username)
+            if not temp_user.is_active:
+                return Response({"error": "Account not verified. Please verify your email."}, status=403)
+        except User.DoesNotExist:
+            pass
         return Response({"error": "Invalid credentials"}, status=401)
 
     refresh = RefreshToken.for_user(user)
-
     return Response({
         "access": str(refresh.access_token),
         "refresh": str(refresh),
+        "username": user.username,
+        "email": user.email
     })
-
-
-import random
-from django.core.mail import send_mail
-from .models import OTPVerification
-from rest_framework.permissions import IsAuthenticated
-from rest_framework.decorators import permission_classes
 
 @api_view(['POST'])
 def forgot_password(request):
@@ -70,21 +90,7 @@ def forgot_password(request):
     except User.DoesNotExist:
         return Response({"error": "User with this email does not exist"}, status=404)
         
-    otp = str(random.randint(100000, 999999))
-    
-    OTPVerification.objects.update_or_create(
-        user=user,
-        defaults={'otp': otp, 'is_verified': False}
-    )
-    
-    send_mail(
-        'Password Reset OTP',
-        f'Your OTP for password reset is {otp}',
-        'noreply@chessapp.com',
-        [email],
-        fail_silently=False,
-    )
-    
+    _send_otp_email(user)
     return Response({"message": "OTP sent to email"})
 
 @api_view(['POST'])
@@ -98,8 +104,22 @@ def verify_otp(request):
     except (User.DoesNotExist, OTPVerification.DoesNotExist):
         return Response({"error": "Invalid email or OTP"}, status=400)
         
+    if otp_record.is_expired():
+        return Response({"error": "OTP has expired. Please request a new one."}, status=400)
+        
     otp_record.is_verified = True
     otp_record.save()
+    
+    # If it was a signup OTP, activate the user
+    if not user.is_active:
+        user.is_active = True
+        user.save()
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            "message": "Email verified and account activated!",
+            "access": str(refresh.access_token),
+            "refresh": str(refresh)
+        })
     
     return Response({"message": "OTP verified successfully"})
 
@@ -117,9 +137,11 @@ def reset_password(request):
     if not otp_record.is_verified:
         return Response({"error": "OTP not verified"}, status=400)
         
+    if otp_record.is_expired():
+        return Response({"error": "Verification session expired. Please request a new OTP."}, status=400)
+        
     user.set_password(new_password)
     user.save()
-    
     otp_record.delete()
     
     return Response({"message": "Password reset successful"})
@@ -143,4 +165,4 @@ def logout_view(request):
             token.blacklist()
         return Response({"message": "Logged out successfully"})
     except Exception as e:
-        return Response({"message": "Logged out (token local clear)"})
+        return Response({"message": "Logged out (token local clear)"})
