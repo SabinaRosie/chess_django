@@ -177,3 +177,5 @@ EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = f"Sabina Chess <{EMAIL_HOST_USER}>"
 EMAIL_TIMEOUT = 10  # Timeout in seconds to prevent hanging on blocked ports
 
+# Brevo (Sendinblue) API for sending emails via HTTP (HF Spaces blocks SMTP)
+BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')

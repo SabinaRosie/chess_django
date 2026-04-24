@@ -1,4 +1,5 @@
 import random
+import requests as http_requests
 from django.core.mail import send_mail
 from django.contrib.auth import authenticate
 from django.contrib.auth.models import User
@@ -11,6 +12,34 @@ from .models import OTPVerification
 from django.conf import settings
 from django.utils import timezone
 
+
+def _send_email_brevo(to_email, subject, body):
+    """Send email via Brevo HTTP API (works on HF Spaces where SMTP is blocked)."""
+    api_key = settings.BREVO_API_KEY
+    if not api_key:
+        return False, "BREVO_API_KEY not set"
+
+    resp = http_requests.post(
+        "https://api.brevo.com/v3/smtp/email",
+        headers={
+            "api-key": api_key,
+            "Content-Type": "application/json",
+        },
+        json={
+            "sender": {"name": "Sabina Chess", "email": settings.EMAIL_HOST_USER},
+            "to": [{"email": to_email}],
+            "subject": subject,
+            "textContent": body,
+        },
+        timeout=15,
+    )
+
+    if resp.status_code in (200, 201):
+        return True, None
+    else:
+        return False, f"Brevo API error {resp.status_code}: {resp.text}"
+
+
 def _send_otp_email(user):
     otp = str(random.randint(100000, 999999))
 
@@ -21,29 +50,38 @@ def _send_otp_email(user):
     )
 
     # If updating existing record, reset the expiry timestamp
-    # auto_now_add makes created_at read-only via .save(), so use queryset.update()
     if not created:
         OTPVerification.objects.filter(pk=otp_record.pk).update(created_at=timezone.now())
 
     print(f"DEBUG: sending OTP {otp} to {user.email}")
-    print(f"DEBUG: EMAIL_HOST_USER={settings.EMAIL_HOST_USER}")
-    print(f"DEBUG: EMAIL_HOST={settings.EMAIL_HOST}:{settings.EMAIL_PORT}")
-    print(f"DEBUG: EMAIL_PASSWORD set={bool(settings.EMAIL_HOST_PASSWORD)}")
 
-    try:
-        send_mail(
-            'Your Verification Code',
-            f'Your verification code is {otp}. It will expire in 10 minutes.',
-            settings.DEFAULT_FROM_EMAIL,
-            [user.email],
-            fail_silently=False,
+    # Use Brevo API if key is set, otherwise fall back to SMTP (for local dev)
+    if settings.BREVO_API_KEY:
+        success, error = _send_email_brevo(
+            user.email,
+            "Your Verification Code",
+            f"Your verification code is {otp}. It will expire in 10 minutes.",
         )
-        print(f"DEBUG: OTP email sent successfully to {user.email}")
-        return True, None
-    except Exception as e:
-        error_msg = str(e)
-        print(f"WARNING: Email sending failed: {error_msg}")
-        return False, error_msg
+        if success:
+            print(f"DEBUG: OTP email sent via Brevo to {user.email}")
+        else:
+            print(f"WARNING: Brevo email failed: {error}")
+        return success, error
+    else:
+        try:
+            send_mail(
+                'Your Verification Code',
+                f'Your verification code is {otp}. It will expire in 10 minutes.',
+                settings.DEFAULT_FROM_EMAIL,
+                [user.email],
+                fail_silently=False,
+            )
+            print(f"DEBUG: OTP email sent via SMTP to {user.email}")
+            return True, None
+        except Exception as e:
+            error_msg = str(e)
+            print(f"WARNING: SMTP email failed: {error_msg}")
+            return False, error_msg
 
 @api_view(['POST'])
 def signup(request):
@@ -263,27 +301,20 @@ def logout_view(request):
 def test_email(request):
     """Diagnostic endpoint to test email configuration."""
     config = {
-        "EMAIL_HOST": settings.EMAIL_HOST,
-        "EMAIL_PORT": settings.EMAIL_PORT,
-        "EMAIL_USE_TLS": settings.EMAIL_USE_TLS,
         "EMAIL_HOST_USER": settings.EMAIL_HOST_USER,
-        "EMAIL_PASSWORD_SET": bool(settings.EMAIL_HOST_PASSWORD),
-        "EMAIL_PASSWORD_LENGTH": len(settings.EMAIL_HOST_PASSWORD) if settings.EMAIL_HOST_PASSWORD else 0,
-        "DEFAULT_FROM_EMAIL": settings.DEFAULT_FROM_EMAIL,
+        "BREVO_API_KEY_SET": bool(settings.BREVO_API_KEY),
+        "method": "brevo" if settings.BREVO_API_KEY else "smtp",
     }
 
-    # Try sending a test email to the configured sender
-    try:
-        from django.core.mail import send_mail
-        send_mail(
-            'Test Email from Sabina Chess',
-            'If you receive this, email is working!',
-            settings.DEFAULT_FROM_EMAIL,
-            [settings.EMAIL_HOST_USER],
-            fail_silently=False,
+    # Test with Brevo if available, otherwise SMTP
+    if settings.BREVO_API_KEY:
+        success, error = _send_email_brevo(
+            settings.EMAIL_HOST_USER,
+            "Test Email from Sabina Chess",
+            "If you receive this, Brevo email is working!",
         )
-        config["test_result"] = "SUCCESS - email sent!"
-    except Exception as e:
-        config["test_result"] = f"FAILED: {str(e)}"
+        config["test_result"] = "SUCCESS" if success else f"FAILED: {error}"
+    else:
+        config["test_result"] = "BREVO_API_KEY not set - cannot test"
 
     return Response(config)
