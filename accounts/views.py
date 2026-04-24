@@ -26,6 +26,9 @@ def _send_otp_email(user):
         OTPVerification.objects.filter(pk=otp_record.pk).update(created_at=timezone.now())
 
     print(f"DEBUG: sending OTP {otp} to {user.email}")
+    print(f"DEBUG: EMAIL_HOST_USER={settings.EMAIL_HOST_USER}")
+    print(f"DEBUG: EMAIL_HOST={settings.EMAIL_HOST}:{settings.EMAIL_PORT}")
+    print(f"DEBUG: EMAIL_PASSWORD set={bool(settings.EMAIL_HOST_PASSWORD)}")
 
     try:
         send_mail(
@@ -36,9 +39,11 @@ def _send_otp_email(user):
             fail_silently=False,
         )
         print(f"DEBUG: OTP email sent successfully to {user.email}")
+        return True, None
     except Exception as e:
-        print(f"WARNING: Email sending failed: {str(e)}")
-        # Don't re-raise — OTP is saved in DB, user just won't get the email
+        error_msg = str(e)
+        print(f"WARNING: Email sending failed: {error_msg}")
+        return False, error_msg
 
 @api_view(['POST'])
 def signup(request):
@@ -137,8 +142,14 @@ def forgot_password(request):
             # If multiple, get the most recently active one or first
             user = User.objects.filter(email__iexact=email).order_by('-last_login').first()
 
-        _send_otp_email(user)
-        return Response({"message": "OTP sent to your email. Please check your inbox (and spam)."})
+        email_sent, email_error = _send_otp_email(user)
+        if email_sent:
+            return Response({"message": "OTP sent to your email. Please check your inbox (and spam)."})
+        else:
+            return Response({
+                "message": "OTP created but email delivery failed. Please try again.",
+                "email_error": email_error
+            }, status=200)
     except Exception as e:
         import traceback
         traceback.print_exc()
@@ -247,3 +258,32 @@ def logout_view(request):
         return Response({"message": "Logged out successfully"})
     except Exception as e:
         return Response({"message": "Logged out (token local clear)"})
+
+@api_view(['GET'])
+def test_email(request):
+    """Diagnostic endpoint to test email configuration."""
+    config = {
+        "EMAIL_HOST": settings.EMAIL_HOST,
+        "EMAIL_PORT": settings.EMAIL_PORT,
+        "EMAIL_USE_TLS": settings.EMAIL_USE_TLS,
+        "EMAIL_HOST_USER": settings.EMAIL_HOST_USER,
+        "EMAIL_PASSWORD_SET": bool(settings.EMAIL_HOST_PASSWORD),
+        "EMAIL_PASSWORD_LENGTH": len(settings.EMAIL_HOST_PASSWORD) if settings.EMAIL_HOST_PASSWORD else 0,
+        "DEFAULT_FROM_EMAIL": settings.DEFAULT_FROM_EMAIL,
+    }
+
+    # Try sending a test email to the configured sender
+    try:
+        from django.core.mail import send_mail
+        send_mail(
+            'Test Email from Sabina Chess',
+            'If you receive this, email is working!',
+            settings.DEFAULT_FROM_EMAIL,
+            [settings.EMAIL_HOST_USER],
+            fail_silently=False,
+        )
+        config["test_result"] = "SUCCESS - email sent!"
+    except Exception as e:
+        config["test_result"] = f"FAILED: {str(e)}"
+
+    return Response(config)
