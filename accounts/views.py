@@ -229,6 +229,12 @@ def user_profile(request):
         "email": user.email,
     })
 
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_users(request):
+    users = User.objects.all().values('username', 'email')
+    return Response(list(users))
+
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
