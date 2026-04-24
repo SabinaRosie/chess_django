@@ -12,33 +12,33 @@ from django.conf import settings
 from django.utils import timezone
 
 def _send_otp_email(user):
+    otp = str(random.randint(100000, 999999))
+
+    # update_or_create to ensure one OTP per user
+    otp_record, created = OTPVerification.objects.update_or_create(
+        user=user,
+        defaults={'otp': otp, 'is_verified': False}
+    )
+
+    # If updating existing record, reset the expiry timestamp
+    # auto_now_add makes created_at read-only via .save(), so use queryset.update()
+    if not created:
+        OTPVerification.objects.filter(pk=otp_record.pk).update(created_at=timezone.now())
+
+    print(f"DEBUG: sending OTP {otp} to {user.email}")
+
     try:
-        otp = str(random.randint(100000, 999999))
-        
-        # update_or_create to ensure one OTP per user
-        otp_record, created = OTPVerification.objects.update_or_create(
-            user=user,
-            defaults={'otp': otp, 'is_verified': False}
-        )
-        
-        # If updating existing record, update the created_at timestamp to reset expiry
-        if not created:
-            otp_record.created_at = timezone.now()
-            otp_record.save()
-            
-        print(f"DEBUG: sending OTP {otp} to {user.email}")
-        
         send_mail(
             'Your Verification Code',
             f'Your verification code is {otp}. It will expire in 10 minutes.',
             settings.DEFAULT_FROM_EMAIL,
             [user.email],
-            fail_silently=True,
+            fail_silently=False,
         )
+        print(f"DEBUG: OTP email sent successfully to {user.email}")
     except Exception as e:
-        print(f"Error in _send_otp_email: {str(e)}")
-        # We don't re-raise here to allow the process to continue if email fails
-        # but let's at least log it.
+        print(f"WARNING: Email sending failed: {str(e)}")
+        # Don't re-raise — OTP is saved in DB, user just won't get the email
 
 @api_view(['POST'])
 def signup(request):
@@ -52,7 +52,7 @@ def signup(request):
 
         if User.objects.filter(username=username).exists():
             return Response({"error": "Username already exists"}, status=400)
-        
+
         if User.objects.filter(email=email).exists():
             return Response({"error": "Email already exists"}, status=400)
 
@@ -127,7 +127,7 @@ def forgot_password(request):
         email = request.data.get('email')
         if not email:
             return Response({"error": "Email is required"}, status=400)
-        
+
         try:
             # Case-insensitive email lookup
             user = User.objects.get(email__iexact=email)
@@ -136,28 +136,29 @@ def forgot_password(request):
         except User.MultipleObjectsReturned:
             # If multiple, get the most recently active one or first
             user = User.objects.filter(email__iexact=email).order_by('-last_login').first()
-            
+
         _send_otp_email(user)
         return Response({"message": "OTP sent to your email. Please check your inbox (and spam)."})
     except Exception as e:
-        print(f"DEBUG: forgot_password error: {str(e)}")
-        return Response({"error": f"Internal Server Error: {str(e)}"}, status=500)
+        import traceback
+        traceback.print_exc()
+        return Response({"error": f"Failed to send OTP: {str(e)}"}, status=500)
 
 @api_view(['POST'])
 def verify_otp(request):
     try:
         email = request.data.get('email')
         otp = request.data.get('otp')
-        
+
         if not email or not otp:
             return Response({"error": "Email and OTP are required"}, status=400)
-            
+
         try:
             # Case-insensitive email lookup for flexibility
             user = User.objects.filter(email__iexact=email).first()
             if not user:
                 return Response({"error": "No user found with this email"}, status=404)
-                
+
             # Ensure otp is treated as string and trimmed
             otp_str = str(otp).strip()
             otp_record = OTPVerification.objects.get(user=user, otp=otp_str)
@@ -165,13 +166,13 @@ def verify_otp(request):
             return Response({"error": "Invalid OTP. Please check your email again."}, status=400)
         except Exception as e:
             return Response({"error": f"Verification error: {str(e)}"}, status=400)
-            
+
         if otp_record.is_expired():
             return Response({"error": "OTP has expired. Please request a new one."}, status=400)
-            
+
         otp_record.is_verified = True
         otp_record.save()
-        
+
         # If it was a signup OTP, activate the user
         if not user.is_active:
             user.is_active = True
@@ -182,7 +183,7 @@ def verify_otp(request):
                 "access": str(refresh.access_token),
                 "refresh": str(refresh)
             })
-        
+
         return Response({"message": "OTP verified successfully"})
     except Exception as e:
         print(f"DEBUG: verify_otp error: {str(e)}")
@@ -193,10 +194,10 @@ def reset_password(request):
     try:
         email = request.data.get('email')
         new_password = request.data.get('new_password')
-        
+
         if not email or not new_password:
             return Response({"error": "Email and new password are required"}, status=400)
-            
+
         try:
             user = User.objects.filter(email__iexact=email).first()
             if not user:
@@ -204,17 +205,17 @@ def reset_password(request):
             otp_record = OTPVerification.objects.get(user=user)
         except OTPVerification.DoesNotExist:
             return Response({"error": "No OTP verification record found for this user"}, status=400)
-            
+
         if not otp_record.is_verified:
             return Response({"error": "OTP not verified"}, status=400)
-            
+
         if otp_record.is_expired():
             return Response({"error": "Verification session expired. Please request a new OTP."}, status=400)
-            
+
         user.set_password(new_password)
         user.save()
         otp_record.delete()
-        
+
         return Response({"message": "Password reset successful"})
     except Exception as e:
         print(f"DEBUG: reset_password error: {str(e)}")
@@ -245,4 +246,4 @@ def logout_view(request):
             token.blacklist()
         return Response({"message": "Logged out successfully"})
     except Exception as e:
-        return Response({"message": "Logged out (token local clear)"})
+        return Response({"message": "Logged out (token local clear)"})
