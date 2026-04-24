@@ -32,4 +32,4 @@ RUN python manage.py collectstatic --noinput
 EXPOSE 7860
 
 # Command to run the application
-CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind 0.0.0.0:7860 sabina_chess.wsgi:application"]
+CMD ["sh", "-c", "python manage.py migrate && gunicorn --bind 0.0.0.0:7860 --timeout 120 sabina_chess.wsgi:application"]
