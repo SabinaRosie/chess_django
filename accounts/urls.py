@@ -1,6 +1,10 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import signup, login, forgot_password, verify_otp, reset_password, user_profile, logout_view, get_users, test_email
+from .views import (
+    signup, login, forgot_password, verify_otp, reset_password,
+    user_profile, logout_view, get_users, test_email,
+    create_call, check_incoming, answer_call, send_signal, get_signals, end_call,
+)
 
 urlpatterns = [
     path('signup', signup),
@@ -13,4 +17,12 @@ urlpatterns = [
     path('users', get_users),
     path('token/refresh', TokenRefreshView.as_view()),
     path('test-email', test_email),
+
+    # WebRTC Call Signaling
+    path('call/create', create_call),
+    path('call/check-incoming', check_incoming),
+    path('call/answer', answer_call),
+    path('call/signal', send_signal),
+    path('call/signals', get_signals),
+    path('call/end', end_call),
 ]
