@@ -48,3 +48,35 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'type': event['signal_type'],
                 'data': event['data']
             }))
+
+class NotificationConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        if self.scope["user"].is_anonymous:
+            await self.close()
+            return
+            
+        self.user_group_name = f'user_{self.scope["user"].username}'
+        await self.channel_layer.group_add(
+            self.user_group_name,
+            self.channel_name
+        )
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        if hasattr(self, 'user_group_name'):
+            await self.channel_layer.group_discard(
+                self.user_group_name,
+                self.channel_name
+            )
+
+    async def incoming_call(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'incoming_call',
+            'data': event['data']
+        }))
+
+    async def call_cancelled(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'call_cancelled',
+            'data': event['data']
+        }))

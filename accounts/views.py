@@ -11,6 +11,8 @@ from .models import OTPVerification, CallRoom, CallSignal
 
 from django.conf import settings
 from django.utils import timezone
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 
 def _send_email_brevo(to_email, subject, body):
@@ -355,6 +357,20 @@ def create_call(request):
             call_type=call_type,
         )
 
+        # Notify callee via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'user_{callee.username}',
+            {
+                'type': 'incoming_call',
+                'data': {
+                    'room_id': str(room.room_id),
+                    'caller': request.user.username,
+                    'call_type': call_type,
+                }
+            }
+        )
+
         return Response({
             "room_id": str(room.room_id),
             "caller": request.user.username,
@@ -533,6 +549,17 @@ def end_call(request):
 
         room.status = 'ended'
         room.save()
+
+        # Notify the other party about the cancellation if it was pending
+        other_user = room.callee if request.user == room.caller else room.caller
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'user_{other_user.username}',
+            {
+                'type': 'call_cancelled',
+                'data': {'room_id': str(room.room_id)}
+            }
+        )
 
         # Clean up signals
         CallSignal.objects.filter(room=room).delete()
