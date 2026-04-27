@@ -55,7 +55,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
             
-        self.user_group_name = f'user_{self.scope["user"].username}'
+        self.user_group_name = f'user_{self.scope["user"].id}'
         await self.channel_layer.group_add(
             self.user_group_name,
             self.channel_name
