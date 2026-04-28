@@ -32,6 +32,8 @@ class CallRoom(models.Model):
     callee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_received')
     call_type = models.CharField(max_length=5, choices=CALL_TYPES, default='audio')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    offer_sdp = models.JSONField(null=True, blank=True)
+    answer_sdp = models.JSONField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     def is_expired(self):
