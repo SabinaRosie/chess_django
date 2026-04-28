@@ -567,3 +567,65 @@ def end_call(request):
         return Response({"status": "ended"})
     except Exception as e:
         return Response({"error": str(e)}, status=500)
+
+
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_turn_credentials(request):
+    """Generate ephemeral TURN credentials using HMAC-SHA1 shared secret.
+    Uses Metered Open Relay's static auth (no signup required).
+    Credentials are valid for 24 hours.
+    """
+    import hmac
+    import hashlib
+    import base64
+    import time
+
+    # Metered Open Relay static auth secret (public, no signup needed)
+    turn_secret = 'openrelayprojectsecret'
+    turn_server = 'staticauth.openrelay.metered.ca'
+
+    # Generate time-limited credentials (valid for 24 hours)
+    ttl = 24 * 3600  # 24 hours
+    expiry = int(time.time()) + ttl
+    username = f'{expiry}:{request.user.username}'
+    
+    # HMAC-SHA1 of the username with the shared secret
+    hmac_digest = hmac.new(
+        turn_secret.encode('utf-8'),
+        username.encode('utf-8'),
+        hashlib.sha1
+    ).digest()
+    credential = base64.b64encode(hmac_digest).decode('utf-8')
+
+    ice_servers = [
+        {'urls': 'stun:stun.l.google.com:19302'},
+        {'urls': 'stun:stun1.l.google.com:19302'},
+        {
+            'urls': f'turn:{turn_server}:80',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': f'turn:{turn_server}:80?transport=tcp',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': f'turn:{turn_server}:443',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': f'turn:{turn_server}:443?transport=tcp',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': f'turns:{turn_server}:443?transport=tcp',
+            'username': username,
+            'credential': credential,
+        },
+    ]
+
+    return Response({'ice_servers': ice_servers})

@@ -4,6 +4,7 @@ from .views import (
     signup, login, forgot_password, verify_otp, reset_password,
     user_profile, logout_view, get_users, test_email,
     create_call, check_incoming, answer_call, send_signal, get_signals, end_call,
+    get_turn_credentials,
 )
 
 urlpatterns = [
@@ -25,4 +26,5 @@ urlpatterns = [
     path('call/signal', send_signal),
     path('call/signals', get_signals),
     path('call/end', end_call),
+    path('call/turn-credentials', get_turn_credentials),
 ]
