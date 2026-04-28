@@ -360,7 +360,7 @@ def create_call(request):
         # Notify callee via WebSocket
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            f'user_{callee.id}',
+            f'user_{callee.id}'.replace(' ', '_'),
             {
                 'type': 'incoming_call',
                 'data': {
@@ -554,7 +554,7 @@ def end_call(request):
         other_user = room.callee if request.user == room.caller else room.caller
         channel_layer = get_channel_layer()
         async_to_sync(channel_layer.group_send)(
-            f'user_{other_user.id}',
+            f'user_{other_user.id}'.replace(' ', '_'),
             {
                 'type': 'call_cancelled',
                 'data': {'room_id': str(room.room_id)}
