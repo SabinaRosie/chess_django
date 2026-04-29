@@ -599,7 +599,26 @@ def get_turn_credentials(request):
     credential = base64.b64encode(hmac_digest).decode('utf-8')
 
     ice_servers = [
-        # 🔹 STUN Servers (Public IP Discovery)
+        # 🔹 TURN Servers (Relay) - HIGH PRIORITY for cross-network
+        {
+            'urls': [
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:3478',
+            ],
+            'username': 'openrelayproject',
+            'credential': 'openrelayproject',
+        },
+        {
+            'urls': [
+                'turns:openrelay.metered.ca:443?transport=tcp',
+                'turns:openrelay.metered.ca:3478?transport=tcp',
+            ],
+            'username': 'openrelayproject',
+            'credential': 'openrelayproject',
+        },
+
+        # 🔹 STUN Servers (Discovery)
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
@@ -609,44 +628,6 @@ def get_turn_credentials(request):
         {'urls': 'stun:stun.services.mozilla.com'},
         {'urls': 'stun:stun.voiparound.com:3478'},
         {'urls': 'stun:stun.stunprotocol.org:3478'},
-
-        # 🔹 TURN Servers (Relay for restricted networks)
-        # Using OpenRelay with ephemeral HMAC credentials (higher priority)
-        {
-            'urls': [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:443',
-                'turn:openrelay.metered.ca:3478',
-            ],
-            'username': username,
-            'credential': credential,
-        },
-        {
-            'urls': [
-                'turns:openrelay.metered.ca:443?transport=tcp',
-                'turns:openrelay.metered.ca:3478?transport=tcp',
-            ],
-            'username': username,
-            'credential': credential,
-        },
-
-        # 🔹 Fallback: Static Credentials (lower priority)
-        {
-            'urls': [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:443',
-                'turn:openrelay.metered.ca:3478',
-            ],
-            'username': 'openrelayproject',
-            'credential': 'openrelayproject',
-        },
-        {
-            'urls': [
-                'turns:openrelay.metered.ca:443?transport=tcp',
-            ],
-            'username': 'openrelayproject',
-            'credential': 'openrelayproject',
-        },
     ]
 
     return Response({'ice_servers': ice_servers})
