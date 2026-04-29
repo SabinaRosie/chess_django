@@ -599,7 +599,7 @@ def get_turn_credentials(request):
     credential = base64.b64encode(hmac_digest).decode('utf-8')
 
     ice_servers = [
-        # STUN servers for public IP discovery
+        # 🔹 STUN Servers (Public IP Discovery)
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
@@ -607,25 +607,30 @@ def get_turn_credentials(request):
         {'urls': 'stun:stun4.l.google.com:19302'},
         {'urls': 'stun:stun.cloudflare.com:3478'},
         {'urls': 'stun:stun.services.mozilla.com'},
-        # TURN servers with ephemeral HMAC credentials (authenticated relay)
+        {'urls': 'stun:stun.voiparound.com:3478'},
+        {'urls': 'stun:stun.stunprotocol.org:3478'},
+
+        # 🔹 TURN Servers (Relay for restricted networks)
+        # Using OpenRelay with ephemeral HMAC credentials (higher priority)
         {
             'urls': [
-                f'turn:{turn_server}:80',
-                f'turn:{turn_server}:443',
-                f'turn:{turn_server}:3478',
+                'turn:openrelay.metered.ca:80',
+                'turn:openrelay.metered.ca:443',
+                'turn:openrelay.metered.ca:3478',
             ],
             'username': username,
             'credential': credential,
         },
         {
             'urls': [
-                f'turns:{turn_server}:443?transport=tcp',
-                f'turns:{turn_server}:3478?transport=tcp',
+                'turns:openrelay.metered.ca:443?transport=tcp',
+                'turns:openrelay.metered.ca:3478?transport=tcp',
             ],
             'username': username,
             'credential': credential,
         },
-        # Fallback: unauthenticated public TURN (lower priority)
+
+        # 🔹 Fallback: Static Credentials (lower priority)
         {
             'urls': [
                 'turn:openrelay.metered.ca:80',
