@@ -589,7 +589,7 @@ def get_turn_credentials(request):
     ttl = 24 * 3600  # 24 hours
     expiry = int(time.time()) + ttl
     username = f'{expiry}:{request.user.username}'
-    
+
     # HMAC-SHA1 of the username with the shared secret
     hmac_digest = hmac.new(
         turn_secret.encode('utf-8'),
@@ -599,6 +599,7 @@ def get_turn_credentials(request):
     credential = base64.b64encode(hmac_digest).decode('utf-8')
 
     ice_servers = [
+        # STUN servers for public IP discovery
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
@@ -606,6 +607,25 @@ def get_turn_credentials(request):
         {'urls': 'stun:stun4.l.google.com:19302'},
         {'urls': 'stun:stun.cloudflare.com:3478'},
         {'urls': 'stun:stun.services.mozilla.com'},
+        # TURN servers with ephemeral HMAC credentials (authenticated relay)
+        {
+            'urls': [
+                f'turn:{turn_server}:80',
+                f'turn:{turn_server}:443',
+                f'turn:{turn_server}:3478',
+            ],
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': [
+                f'turns:{turn_server}:443?transport=tcp',
+                f'turns:{turn_server}:3478?transport=tcp',
+            ],
+            'username': username,
+            'credential': credential,
+        },
+        # Fallback: unauthenticated public TURN (lower priority)
         {
             'urls': [
                 'turn:openrelay.metered.ca:80',
@@ -618,7 +638,6 @@ def get_turn_credentials(request):
         {
             'urls': [
                 'turns:openrelay.metered.ca:443?transport=tcp',
-                'turns:openrelay.metered.ca:3478?transport=tcp',
             ],
             'username': 'openrelayproject',
             'credential': 'openrelayproject',
