@@ -6,6 +6,7 @@ from .views import (
     create_call, check_incoming, answer_call, send_signal, get_signals, end_call,
     get_turn_credentials,
 )
+from . import chat_views
 
 urlpatterns = [
     path('signup', signup),
@@ -27,4 +28,10 @@ urlpatterns = [
     path('call/signals', get_signals),
     path('call/end', end_call),
     path('call/turn-credentials', get_turn_credentials),
+    
+    # Chat Endpoints
+    path('chat/conversations', chat_views.list_conversations),
+    path('chat/messages/<uuid:conversation_id>', chat_views.get_messages),
+    path('chat/start', chat_views.start_conversation),
+    path('chat/seen/<uuid:conversation_id>', chat_views.mark_as_seen),
 ]

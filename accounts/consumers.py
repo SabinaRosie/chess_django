@@ -1,7 +1,8 @@
 import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
-from .models import CallRoom, CallSignal
+from django.utils import timezone
+from .models import CallRoom, CallSignal, Conversation, ChatMessage
 
 class CallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -129,3 +130,159 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'type': 'call_cancelled',
             'data': event['data']
         }))
+
+    async def chat_notification(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'chat_notification',
+            'data': event['data']
+        }))
+
+class ChatConsumer(AsyncWebsocketConsumer):
+    async def connect(self):
+        self.conversation_id = self.scope['url_route']['kwargs']['conversation_id']
+        self.room_group_name = f'chat_{self.conversation_id}'
+        
+        user = self.scope.get('user')
+        if not user or not user.is_authenticated:
+            await self.close()
+            return
+            
+        is_participant = await self.check_participant(user)
+        if not is_participant:
+            await self.close()
+            return
+
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+        await self.accept()
+
+    async def disconnect(self, close_code):
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+
+    async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+        except Exception:
+            return
+
+        message_type = data.get('type')
+        
+        if message_type == 'message':
+            content = data.get('content')
+            msg_type = data.get('message_type', 'text')
+            
+            # Save to DB first
+            msg = await self.save_message(content, msg_type)
+            
+            # Broadcast to group
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'chat_message_relay',
+                    'message': {
+                        'id': msg.id,
+                        'sender_id': msg.sender.id,
+                        'content': msg.content,
+                        'message_type': msg.message_type,
+                        'status': msg.status,
+                        'created_at': str(msg.created_at),
+                    },
+                    'sender_channel': self.channel_name
+                }
+            )
+
+            # Notify the other participant via NotificationConsumer for background/global alerts
+            other_user = await self.get_other_participant()
+            if other_user:
+                await self.channel_layer.group_send(
+                    f'user_{other_user.id}'.replace(' ', '_'),
+                    {
+                        'type': 'chat_notification',
+                        'data': {
+                            'sender': self.scope['user'].username,
+                            'content': content[:50],
+                            'conversation_id': str(self.conversation_id)
+                        }
+                    }
+                )
+
+        elif message_type == 'typing':
+            is_typing = data.get('is_typing', False)
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'user_typing',
+                    'user_id': self.scope['user'].id,
+                    'is_typing': is_typing,
+                    'sender_channel': self.channel_name
+                }
+            )
+            
+        elif message_type == 'read':
+            await self.mark_messages_seen()
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'messages_seen',
+                    'user_id': self.scope['user'].id,
+                    'sender_channel': self.channel_name
+                }
+            )
+
+    async def chat_message_relay(self, event):
+        if self.channel_name != event['sender_channel']:
+            await self.send(text_data=json.dumps({
+                'type': 'message',
+                'message': event['message']
+            }))
+
+    async def user_typing(self, event):
+        if self.channel_name != event['sender_channel']:
+            await self.send(text_data=json.dumps({
+                'type': 'typing',
+                'user_id': event['user_id'],
+                'is_typing': event['is_typing']
+            }))
+
+    async def messages_seen(self, event):
+        if self.channel_name != event['sender_channel']:
+            await self.send(text_data=json.dumps({
+                'type': 'seen',
+                'user_id': event['user_id']
+            }))
+
+    @database_sync_to_async
+    def check_participant(self, user):
+        return Conversation.objects.filter(id=self.conversation_id, participants=user).exists()
+
+    @database_sync_to_async
+    def get_other_participant(self):
+        conv = Conversation.objects.get(id=self.conversation_id)
+        return conv.participants.exclude(id=self.scope['user'].id).first()
+
+    @database_sync_to_async
+    def save_message(self, content, msg_type):
+        conv = Conversation.objects.get(id=self.conversation_id)
+        msg = ChatMessage.objects.create(
+            conversation=conv,
+            sender=self.scope['user'],
+            content=content,
+            message_type=msg_type,
+            status='sent'
+        )
+        conv.last_message_content = content
+        conv.last_message_time = timezone.now()
+        conv.save()
+        return msg
+
+    @database_sync_to_async
+    def mark_messages_seen(self):
+        ChatMessage.objects.filter(
+            conversation_id=self.conversation_id,
+            status__in=['sent', 'delivered']
+        ).exclude(sender=self.scope['user']).update(status='seen')

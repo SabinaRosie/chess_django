@@ -61,3 +61,45 @@ class CallSignal(models.Model):
     def __str__(self):
         return f"{self.sender.username} - {self.signal_type} in {self.room.room_id}"
 
+
+class Conversation(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    participants = models.ManyToManyField(User, related_name='conversations')
+    last_message_content = models.TextField(null=True, blank=True)
+    last_message_time = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Conversation {self.id}"
+
+
+class ChatMessage(models.Model):
+    STATUS_CHOICES = [
+        ('sent', 'Sent'),
+        ('delivered', 'Delivered'),
+        ('seen', 'Seen'),
+    ]
+    MESSAGE_TYPES = [
+        ('text', 'Text'),
+        ('image', 'Image'),
+        ('video', 'Video'),
+        ('file', 'File'),
+    ]
+
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name='messages')
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='sent_messages')
+    content = models.TextField()
+    message_type = models.CharField(max_length=10, choices=MESSAGE_TYPES, default='text')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='sent')
+    created_at = models.DateTimeField(auto_now_add=True)
+    is_deleted = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['conversation', 'created_at']),
+        ]
+
+    def __str__(self):
+        return f"{self.sender.username}: {self.content[:20]}"
+

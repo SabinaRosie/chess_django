@@ -114,6 +114,7 @@ def signup(request):
             "message": "User created successfully!",
             "access": str(refresh.access_token),
             "refresh": str(refresh),
+            "user_id": user.id,
             "username": user.username,
             "email": user.email
         })
@@ -159,6 +160,7 @@ def login(request):
         return Response({
             "access": str(refresh.access_token),
             "refresh": str(refresh),
+            "user_id": user.id,
             "username": user.username,
             "email": user.email
         })
