@@ -69,6 +69,11 @@ class Conversation(models.Model):
     last_message_time = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    class Meta:
+        indexes = [
+            models.Index(fields=['last_message_time']),
+        ]
+
     def __str__(self):
         return f"Conversation {self.id}"
 

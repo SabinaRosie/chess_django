@@ -5,15 +5,25 @@ from django.db.models import Q
 from .models import Conversation, ChatMessage
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db.models import Q, Count
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def list_conversations(request):
     """List all conversations for the authenticated user."""
-    conversations = request.user.conversations.all().order_by('-last_message_time')
+    conversations = request.user.conversations.annotate(
+        unread=Count(
+            'messages',
+            filter=Q(messages__status__in=['sent', 'delivered']) & ~Q(messages__sender=request.user)
+        )
+    ).prefetch_related('participants').order_by('-last_message_time')
+    
     data = []
     for conv in conversations:
-        other_user = conv.participants.exclude(id=request.user.id).first()
+        # Since we prefetched participants, this is now efficient
+        participants = list(conv.participants.all())
+        other_user = next((u for u in participants if u.id != request.user.id), None)
+        
         if not other_user:
             continue
             
@@ -25,7 +35,7 @@ def list_conversations(request):
             },
             'last_message': conv.last_message_content,
             'last_message_time': conv.last_message_time,
-            'unread_count': conv.messages.filter(status__in=['sent', 'delivered']).exclude(sender=request.user).count()
+            'unread_count': conv.unread
         })
     return Response(data)
 
@@ -47,10 +57,11 @@ def get_messages(request, conversation_id):
         messages = messages.filter(created_at__lt=before)
     
     # We order by -created_at for fetching, but return them in ascending order for the UI
-    messages = messages.order_by('-created_at')[:limit]
+    # Convert QuerySet to list before reversing to avoid re-querying or issues with slices
+    messages_list = list(messages.order_by('-created_at')[:limit])
     
     data = []
-    for msg in reversed(messages):
+    for msg in reversed(messages_list):
         data.append({
             'id': msg.id,
             'sender_id': msg.sender.id,
@@ -62,7 +73,7 @@ def get_messages(request, conversation_id):
     
     return Response({
         'messages': data,
-        'has_more': len(messages) == limit
+        'has_more': len(messages_list) == limit
     })
 
 @api_view(['POST'])

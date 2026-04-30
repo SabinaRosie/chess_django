@@ -608,16 +608,16 @@ def get_turn_credentials(request):
                 'turn:openrelay.metered.ca:443',
                 'turn:openrelay.metered.ca:3478',
             ],
-            'username': 'openrelayproject',
-            'credential': 'openrelayproject',
+            'username': username,
+            'credential': credential,
         },
         {
             'urls': [
                 'turns:openrelay.metered.ca:443?transport=tcp',
                 'turns:openrelay.metered.ca:3478?transport=tcp',
             ],
-            'username': 'openrelayproject',
-            'credential': 'openrelayproject',
+            'username': username,
+            'credential': credential,
         },
 
         # 🔹 STUN Servers (Discovery)
