@@ -286,7 +286,7 @@ def user_profile(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_users(request):
-    users = User.objects.all().values('username', 'email')
+    users = User.objects.all().values('id', 'username', 'email')
     return Response(list(users))
 
 @api_view(['POST'])
