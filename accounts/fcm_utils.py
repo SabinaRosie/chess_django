@@ -50,6 +50,15 @@ def send_push_notification(user, title, body, data=None):
             title=title,
             body=body,
         ),
+        android=messaging.AndroidConfig(
+            priority='high',
+            notification=messaging.AndroidNotification(
+                channel_id='high_importance_channel',
+                priority='max',
+                default_vibrate_timings=True,
+                default_sound=True,
+            ),
+        ),
         data=data or {},
         tokens=list(tokens),
     )
