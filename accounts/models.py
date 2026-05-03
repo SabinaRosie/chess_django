@@ -108,3 +108,13 @@ class ChatMessage(models.Model):
     def __str__(self):
         return f"{self.sender.username}: {self.content[:20]}"
 
+class FCMToken(models.Model):
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='fcm_tokens')
+    token = models.TextField(unique=True)
+    device_id = models.CharField(max_length=255, null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.user.username} - {self.token[:10]}"
+

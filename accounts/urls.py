@@ -4,7 +4,7 @@ from .views import (
     signup, login, forgot_password, verify_otp, reset_password,
     user_profile, logout_view, get_users, test_email,
     create_call, check_incoming, answer_call, send_signal, get_signals, end_call,
-    get_turn_credentials,
+    get_turn_credentials, register_fcm_token,
 )
 from . import chat_views
 
@@ -34,4 +34,5 @@ urlpatterns = [
     path('chat/messages/<uuid:conversation_id>', chat_views.get_messages),
     path('chat/start', chat_views.start_conversation),
     path('chat/seen/<uuid:conversation_id>', chat_views.mark_as_seen),
+    path('register-fcm-token', register_fcm_token),
 ]

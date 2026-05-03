@@ -3,6 +3,7 @@ from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
 from .models import CallRoom, CallSignal, Conversation, ChatMessage
+from .fcm_utils import send_push_notification
 
 class CallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -214,29 +215,22 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         }
                     }
                 )
+                
+                # Also send Push Notification via FCM
+                await self.send_fcm_notification(other_user, content)
 
-        elif message_type == 'typing':
-            is_typing = data.get('is_typing', False)
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'user_typing',
-                    'user_id': self.scope['user'].id,
-                    'is_typing': is_typing,
-                    'sender_channel': self.channel_name
-                }
-            )
-            
-        elif message_type == 'read':
-            await self.mark_messages_seen()
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    'type': 'messages_seen',
-                    'user_id': self.scope['user'].id,
-                    'sender_channel': self.channel_name
-                }
-            )
+    async def send_fcm_notification(self, other_user, content):
+        from asgiref.sync import sync_to_async
+        await sync_to_async(send_push_notification)(
+            other_user,
+            title=f"New message from {self.scope['user'].username}",
+            body=content[:100],
+            data={
+                'type': 'chat',
+                'conversation_id': str(self.conversation_id),
+                'sender': self.scope['user'].username,
+            }
+        )
 
     async def chat_message_relay(self, event):
         if self.channel_name != event['sender_channel']:

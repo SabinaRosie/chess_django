@@ -7,7 +7,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework_simplejwt.tokens import RefreshToken
 from rest_framework.permissions import IsAuthenticated
-from .models import OTPVerification, CallRoom, CallSignal
+from .models import OTPVerification, CallRoom, CallSignal, FCMToken
 
 from django.conf import settings
 from django.utils import timezone
@@ -633,3 +633,27 @@ def get_turn_credentials(request):
     ]
 
     return Response({'ice_servers': ice_servers})
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def register_fcm_token(request):
+    """Register or update an FCM token for the current user."""
+    token = request.data.get('token')
+    device_id = request.data.get('device_id')
+
+    if not token:
+        return Response({"error": "token is required"}, status=400)
+
+    # Update or create the token entry
+    fcm_token, created = FCMToken.objects.update_or_create(
+        token=token,
+        defaults={
+            'user': request.user,
+            'device_id': device_id,
+        }
+    )
+
+    return Response({
+        "message": "Token registered successfully",
+        "created": created
+    })
