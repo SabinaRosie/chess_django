@@ -224,17 +224,25 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 print("DEBUG: No other participant found in this conversation.")
 
     async def send_fcm_notification(self, other_user, content):
-        from asgiref.sync import sync_to_async
-        await sync_to_async(send_push_notification)(
-            other_user,
-            title=f"New message from {self.scope['user'].username}",
-            body=content[:100],
-            data={
-                'type': 'chat',
-                'conversation_id': str(self.conversation_id),
-                'sender': self.scope['user'].username,
-            }
-        )
+        print(f"DEBUG: Entering send_fcm_notification for user {other_user.username}...")
+        try:
+            from asgiref.sync import sync_to_async
+            # Call it directly to see if it even starts
+            await sync_to_async(send_push_notification, thread_sensitive=False)(
+                other_user,
+                title=f"New message from {self.scope['user'].username}",
+                body=content[:100],
+                data={
+                    'type': 'chat',
+                    'conversation_id': str(self.conversation_id),
+                    'sender': self.scope['user'].username,
+                }
+            )
+            print(f"DEBUG: Finished calling send_push_notification for {other_user.username}")
+        except Exception as e:
+            print(f"DEBUG: ERROR in send_fcm_notification: {str(e)}")
+            import traceback
+            traceback.print_exc()
 
     async def chat_message_relay(self, event):
         if self.channel_name != event['sender_channel']:
