@@ -180,6 +180,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if message_type == 'message':
             content = data.get('content')
             msg_type = data.get('message_type', 'text')
+            print(f"DEBUG: Receiving message from {self.scope['user'].username}: {content}")
             
             # Save to DB first
             msg = await self.save_message(content, msg_type)
@@ -204,6 +205,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             # Notify the other participant via NotificationConsumer for background/global alerts
             other_user = await self.get_other_participant()
             if other_user:
+                print(f"DEBUG: Found other participant: {other_user.username}. Sending notifications...")
                 await self.channel_layer.group_send(
                     f'user_{other_user.id}'.replace(' ', '_'),
                     {
@@ -218,6 +220,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 
                 # Also send Push Notification via FCM
                 await self.send_fcm_notification(other_user, content)
+            else:
+                print("DEBUG: No other participant found in this conversation.")
 
     async def send_fcm_notification(self, other_user, content):
         from asgiref.sync import sync_to_async
