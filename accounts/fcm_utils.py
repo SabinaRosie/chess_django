@@ -66,8 +66,8 @@ def send_push_notification(user, title, body, data=None):
     )
     
     try:
-        print("FCM DEBUG: Calling messaging.send_multicast...")
-        response = messaging.send_multicast(message_payload)
+        print("FCM DEBUG: Calling messaging.send_each_for_multicast...")
+        response = messaging.send_each_for_multicast(message_payload)
         print(f"FCM DEBUG: Response received! Success: {response.success_count}, Failure: {response.failure_count}")
         
         if response.failure_count > 0:
