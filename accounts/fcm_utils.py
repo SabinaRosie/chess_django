@@ -45,6 +45,7 @@ def send_push_notification(user, title, body, data=None):
         print("ERROR: Firebase Admin SDK not initialized.")
         return
 
+    print(f"FCM DEBUG: Preparing message for tokens: {list(tokens)}")
     message_payload = messaging.MulticastMessage(
         notification=messaging.Notification(
             title=title,
@@ -54,7 +55,8 @@ def send_push_notification(user, title, body, data=None):
             priority='high',
             notification=messaging.AndroidNotification(
                 channel_id='high_importance_channel',
-                priority='max',
+                # Priority can be 'min', 'low', 'default', 'high', 'max'
+                priority='max', 
                 default_vibrate_timings=True,
                 default_sound=True,
             ),
@@ -64,13 +66,16 @@ def send_push_notification(user, title, body, data=None):
     )
     
     try:
+        print("FCM DEBUG: Calling messaging.send_multicast...")
         response = messaging.send_multicast(message_payload)
-        print(f"Successfully sent {response.success_count} notifications; {response.failure_count} failed.")
+        print(f"FCM DEBUG: Response received! Success: {response.success_count}, Failure: {response.failure_count}")
         
-        # Optionally clean up invalid tokens
         if response.failure_count > 0:
-            # Logic to remove stale tokens could go here
-            pass
+            for index, result in enumerate(response.responses):
+                if not result.success:
+                    print(f"FCM DEBUG: Token {index} failed with error: {result.exception}")
             
     except Exception as e:
-        print(f"Error sending FCM message: {e}")
+        print(f"FCM DEBUG: CRITICAL ERROR sending FCM message: {str(e)}")
+        import traceback
+        traceback.print_exc()
