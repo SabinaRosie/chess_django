@@ -37,9 +37,11 @@ initialize_firebase()
 
 def send_push_notification(user, title, body, data=None):
     """Send a push notification to all devices registered for a user."""
-    print(f"FCM DEBUG: Function 'send_push_notification' STARTED for user {user.username}")
-    tokens = FCMToken.objects.filter(user=user).values_list('token', flat=True)
+    print(f"FCM DEBUG: Function 'send_push_notification' STARTED for user {user.username} (ID: {user.id})")
+    tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
+    print(f"FCM DEBUG: Found {len(tokens)} tokens for user {user.username}")
     if not tokens:
+        print(f"FCM DEBUG: Skipping send because 0 tokens were found for {user.username}")
         return
     
     if not firebase_admin._apps:
