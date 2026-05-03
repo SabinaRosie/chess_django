@@ -38,6 +38,8 @@ ALLOWED_HOSTS = [
     '192.168.122.153',
     '.hf.space',
     'manikadahal-sabina-chess.hf.space',
+    'proxy.spaces.internal.huggingface.tech',
+    '*', # Added for maximum flexibility during testing
 ]
 
 CSRF_TRUSTED_ORIGINS = [
