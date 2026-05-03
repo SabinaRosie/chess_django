@@ -9,5 +9,5 @@ class OTPVerificationAdmin(admin.ModelAdmin):
 
 @admin.register(FCMToken)
 class FCMTokenAdmin(admin.ModelAdmin):
-    list_display = ('user', 'token', 'created_at', 'updated_at')
+    list_display = ('user', 'token', 'created_at', 'last_updated')
     search_fields = ('user__username', 'token')
