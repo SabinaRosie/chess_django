@@ -4,18 +4,36 @@ from firebase_admin import credentials, messaging
 from django.conf import settings
 from .models import FCMToken
 
-# Initialize Firebase Admin SDK
-# You need to place your serviceAccountKey.json in the project root or set the path
+import json
+# ...
 FIREBASE_CREDENTIALS_PATH = os.path.join(settings.BASE_DIR, 'serviceAccountKey.json')
 
-if not firebase_admin._apps:
+def initialize_firebase():
+    if firebase_admin._apps:
+        return
+    
+    # 1. Try environment variable (Best for HF Secrets)
+    env_creds = os.environ.get('FIREBASE_CREDENTIALS')
+    if env_creds:
+        try:
+            cred_dict = json.loads(env_creds)
+            cred = credentials.Certificate(cred_dict)
+            firebase_admin.initialize_app(cred)
+            print("FCM: Initialized via environment variable.")
+            return
+        except Exception as e:
+            print(f"ERROR: Failed to parse FIREBASE_CREDENTIALS secret: {e}")
+
+    # 2. Try local file
     if os.path.exists(FIREBASE_CREDENTIALS_PATH):
         cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
         firebase_admin.initialize_app(cred)
+        print("FCM: Initialized via local file.")
     else:
-        # Fallback for environments where the key is provided via env var or other means
-        # In production (e.g. HF Spaces), you might want to use environment variables
-        print("WARNING: Firebase serviceAccountKey.json not found. Push notifications will not be sent.")
+        print("WARNING: Firebase credentials not found. Push notifications disabled.")
+
+# Call initialization
+initialize_firebase()
 
 def send_push_notification(user, title, body, data=None):
     """Send a push notification to all devices registered for a user."""
