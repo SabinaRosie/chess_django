@@ -645,6 +645,7 @@ def register_fcm_token(request):
         return Response({"error": "token is required"}, status=400)
 
     # Update or create the token entry
+    print(f"DEBUG: Registering FCM token for user: {request.user.username} (ID: {request.user.id})")
     fcm_token, created = FCMToken.objects.update_or_create(
         token=token,
         defaults={
@@ -652,6 +653,7 @@ def register_fcm_token(request):
             'device_id': device_id,
         }
     )
+    print(f"DEBUG: Token registration result - Created: {created}")
 
     return Response({
         "message": "Token registered successfully",
