@@ -34,5 +34,6 @@ urlpatterns = [
     path('chat/messages/<uuid:conversation_id>', chat_views.get_messages),
     path('chat/start', chat_views.start_conversation),
     path('chat/seen/<uuid:conversation_id>', chat_views.mark_as_seen),
+    path('chat/messages/<int:message_id>/reactions', chat_views.toggle_reaction),
     path('register-fcm-token', register_fcm_token),
 ]

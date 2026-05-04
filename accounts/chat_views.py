@@ -2,10 +2,12 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
-from .models import Conversation, ChatMessage
+from .models import Conversation, ChatMessage, MessageReaction
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q, Count
+from asgiref.sync import async_to_sync
+from channels.layers import get_channel_layer
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -58,10 +60,21 @@ def get_messages(request, conversation_id):
     
     # We order by -created_at for fetching, but return them in ascending order for the UI
     # Convert QuerySet to list before reversing to avoid re-querying or issues with slices
-    messages_list = list(messages.order_by('-created_at')[:limit])
+    messages_list = list(messages.order_by('-created_at').prefetch_related('reactions')[:limit])
     
     data = []
     for msg in reversed(messages_list):
+        # Aggregate reactions for this message
+        reactions_data = []
+        emoji_groups = msg.reactions.values('emoji').annotate(count=Count('emoji'))
+        for group in emoji_groups:
+            user_ids = list(msg.reactions.filter(emoji=group['emoji']).values_list('user_id', flat=True))
+            reactions_data.append({
+                'emoji': group['emoji'],
+                'count': group['count'],
+                'userIds': user_ids
+            })
+
         data.append({
             'id': msg.id,
             'sender_id': msg.sender.id,
@@ -69,6 +82,7 @@ def get_messages(request, conversation_id):
             'message_type': msg.message_type,
             'status': msg.status,
             'created_at': msg.created_at,
+            'reactions': reactions_data
         })
     
     return Response({
@@ -107,6 +121,71 @@ def start_conversation(request):
             'username': other_user.username,
         }
     })
+
+@api_view(['POST', 'DELETE'])
+@permission_classes([IsAuthenticated])
+def toggle_reaction(request, message_id):
+    """Add or remove a reaction from a message."""
+    try:
+        message = ChatMessage.objects.get(id=message_id)
+        # Check if user is participant in the conversation
+        if not message.conversation.participants.filter(id=request.user.id).exists():
+            return Response({"error": "Unauthorized"}, status=403)
+        
+        if message.is_deleted:
+            return Response({"error": "Cannot react to deleted message"}, status=400)
+            
+    except ChatMessage.DoesNotExist:
+        return Response({"error": "Message not found"}, status=404)
+
+    emoji = request.data.get('emoji')
+    if not emoji:
+        return Response({"error": "emoji required"}, status=400)
+
+    if request.method == 'POST':
+        # Add reaction (toggle behavior is handled by frontend, but we ensure uniqueness here)
+        MessageReaction.objects.get_or_create(
+            message=message,
+            user=request.user,
+            emoji=emoji
+        )
+    elif request.method == 'DELETE':
+        # Remove reaction
+        MessageReaction.objects.filter(
+            message=message,
+            user=request.user,
+            emoji=emoji
+        ).delete()
+
+    # Broadcast update
+    broadcast_reaction_update(message)
+    
+    return Response({"status": "success"})
+
+def broadcast_reaction_update(message):
+    """Helper to broadcast reaction changes via WebSockets."""
+    channel_layer = get_channel_layer()
+    
+    reactions_data = []
+    emoji_groups = message.reactions.values('emoji').annotate(count=Count('emoji'))
+    for group in emoji_groups:
+        user_ids = list(message.reactions.filter(emoji=group['emoji']).values_list('user_id', flat=True))
+        reactions_data.append({
+            'emoji': group['emoji'],
+            'count': group['count'],
+            'userIds': user_ids
+        })
+    
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{message.conversation.id}',
+        {
+            'type': 'message_reaction_updated',
+            'data': {
+                'messageId': message.id,
+                'reactions': reactions_data
+            }
+        }
+    )
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])

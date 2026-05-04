@@ -266,6 +266,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 'user_id': event['user_id']
             }))
 
+    async def message_reaction_updated(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'reaction_updated',
+            'data': event['data']
+        }))
+
     @database_sync_to_async
     def check_participant(self, user):
         return Conversation.objects.filter(id=self.conversation_id, participants=user).exists()
