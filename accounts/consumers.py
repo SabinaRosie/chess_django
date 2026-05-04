@@ -101,16 +101,25 @@ class CallConsumer(AsyncWebsocketConsumer):
             return []
 
 class NotificationConsumer(AsyncWebsocketConsumer):
+    # Global tracking of online users: set of user_ids
+    online_users = set()
+
     async def connect(self):
         if self.scope["user"].is_anonymous:
             await self.close()
             return
             
-        self.user_group_name = f'user_{self.scope["user"].id}'.replace(' ', '_')
+        self.user_id = self.scope["user"].id
+        self.user_group_name = f'user_{self.user_id}'.replace(' ', '_')
+        
         await self.channel_layer.group_add(
             self.user_group_name,
             self.channel_name
         )
+        
+        # Track globally online
+        NotificationConsumer.online_users.add(self.user_id)
+        
         await self.accept()
 
     async def disconnect(self, close_code):
@@ -119,6 +128,10 @@ class NotificationConsumer(AsyncWebsocketConsumer):
                 self.user_group_name,
                 self.channel_name
             )
+            
+        # Untrack globally online
+        if hasattr(self, 'user_id'):
+            NotificationConsumer.online_users.discard(self.user_id)
 
     async def incoming_call(self, event):
         await self.send(text_data=json.dumps({

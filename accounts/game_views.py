@@ -16,17 +16,20 @@ def list_users(request):
     """List all users except the current one, with online status."""
     users = User.objects.exclude(id=request.user.id)
     # For now, let's just return basic info. If profile photo exists, use it.
+    from .consumers import NotificationConsumer
+    
     data = []
     for user in users:
-        # Simple heuristic for online status: if they have a recent session or WS presence
-        # For simplicity, let's just return all users.
+        # Check if user is truly connected to the Notification WS
+        is_online = user.id in NotificationConsumer.online_users
+        
         data.append({
             'id': user.id,
             'username': user.username,
             'first_name': user.first_name,
             'last_name': user.last_name,
-            'is_online': user.is_active, # Placeholder for more complex logic
-            'photo_url': getattr(user, 'profile_photo_url', None), # Placeholder
+            'is_online': is_online,
+            'photo_url': getattr(user, 'profile_photo_url', None),
         })
     return Response(data)
 
