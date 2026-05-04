@@ -98,6 +98,8 @@ class ChatMessage(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='sent')
     created_at = models.DateTimeField(auto_now_add=True)
     is_deleted = models.BooleanField(default=False)
+    replied_to = models.ForeignKey('self', on_delete=models.SET_NULL, null=True, blank=True, related_name='replies')
+    is_forwarded = models.BooleanField(default=False)
 
     class Meta:
         ordering = ['-created_at']

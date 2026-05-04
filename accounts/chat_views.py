@@ -8,6 +8,7 @@ from django.utils import timezone
 from django.db.models import Q, Count
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from .fcm_utils import send_push_notification
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -54,7 +55,7 @@ def get_messages(request, conversation_id):
     before = request.query_params.get('before')
     limit = int(request.query_params.get('limit', 20))
     
-    messages = conversation.messages.filter(is_deleted=False)
+    messages = conversation.messages.all()
     if before:
         messages = messages.filter(created_at__lt=before)
     
@@ -75,6 +76,14 @@ def get_messages(request, conversation_id):
                 'userIds': user_ids
             })
 
+        reply_data = None
+        if msg.replied_to:
+            reply_data = {
+                'id': msg.replied_to.id,
+                'content': msg.replied_to.content if not msg.replied_to.is_deleted else "Message deleted",
+                'sender_id': msg.replied_to.sender.id,
+            }
+
         data.append({
             'id': msg.id,
             'sender_id': msg.sender.id,
@@ -82,7 +91,10 @@ def get_messages(request, conversation_id):
             'message_type': msg.message_type,
             'status': msg.status,
             'created_at': msg.created_at,
-            'reactions': reactions_data
+            'reactions': reactions_data,
+            'replied_to': reply_data,
+            'is_deleted': msg.is_deleted,
+            'is_forwarded': msg.is_forwarded,
         })
     
     return Response({
@@ -197,3 +209,116 @@ def mark_as_seen(request, conversation_id):
     ).exclude(sender=request.user).update(status='seen')
     
     return Response({"status": "success"})
+
+@api_view(['DELETE'])
+@permission_classes([IsAuthenticated])
+def delete_message(request, message_id):
+    """Soft delete a message."""
+    try:
+        message = ChatMessage.objects.get(id=message_id, sender=request.user)
+        message.is_deleted = True
+        message.content = "This message was deleted"
+        message.save()
+        
+        # Broadcast deletion
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'chat_{message.conversation.id}',
+            {
+                'type': 'message_deleted',
+                'data': {
+                    'messageId': message.id
+                }
+            }
+        )
+        
+        return Response({"status": "success"})
+    except ChatMessage.DoesNotExist:
+        return Response({"error": "Message not found or unauthorized"}, status=404)
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def forward_message(request):
+    """Forward a message to another conversation."""
+    message_id = request.data.get('message_id')
+    target_conversation_id = request.data.get('conversation_id')
+    
+    if not message_id or not target_conversation_id:
+        return Response({"error": "message_id and conversation_id required"}, status=400)
+        
+    try:
+        original_msg = ChatMessage.objects.get(id=message_id)
+        # Verify user is a participant in the original message's conversation
+        if not original_msg.conversation.participants.filter(id=request.user.id).exists():
+            return Response({"error": "Unauthorized to forward this message"}, status=403)
+            
+        target_conv = Conversation.objects.get(id=target_conversation_id, participants=request.user)
+    except (ChatMessage.DoesNotExist, Conversation.DoesNotExist):
+        return Response({"error": "Message or target conversation not found"}, status=404)
+
+    # Create new message in target conversation
+    new_msg = ChatMessage.objects.create(
+        conversation=target_conv,
+        sender=request.user,
+        content=original_msg.content,
+        message_type=original_msg.message_type,
+        is_forwarded=True,
+        is_deleted=False
+    )
+    
+    target_conv.last_message_content = new_msg.content
+    target_conv.last_message_time = timezone.now()
+    target_conv.save()
+
+    # Broadcast to target group
+    channel_layer = get_channel_layer()
+    async_to_sync(channel_layer.group_send)(
+        f'chat_{target_conv.id}',
+        {
+            'type': 'chat_message_relay',
+            'message': {
+                'id': new_msg.id,
+                'sender_id': new_msg.sender.id,
+                'content': new_msg.content,
+                'message_type': new_msg.message_type,
+                'status': new_msg.status,
+                'created_at': new_msg.created_at.isoformat(),
+                'replied_to': None,
+                'is_forwarded': True,
+                'is_deleted': False,
+            },
+            'sender_channel': 'api_request'
+        }
+    )
+
+    # Send Push Notification to other user
+    other_user = target_conv.participants.exclude(id=request.user.id).first()
+    if other_user:
+        try:
+            send_push_notification(
+                other_user,
+                title=f"Forwarded message from {request.user.username}",
+                body=new_msg.content[:100],
+                data={
+                    'type': 'chat',
+                    'conversation_id': str(target_conv.id),
+                    'sender': request.user.username,
+                }
+            )
+            # Also send global notification via WebSocket for unread badges
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f'user_{other_user.id}'.replace(' ', '_'),
+                {
+                    'type': 'chat_notification',
+                    'data': {
+                        'sender': request.user.username,
+                        'content': f"Forwarded: {new_msg.content[:50]}",
+                        'conversation_id': str(target_conv.id)
+                    }
+                }
+            )
+        except Exception as e:
+            print(f"DEBUG: Notification failed: {e}")
+
+    return Response({"status": "success", "message_id": new_msg.id})

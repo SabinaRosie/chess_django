@@ -180,11 +180,20 @@ class ChatConsumer(AsyncWebsocketConsumer):
         if message_type == 'message':
             content = data.get('content')
             msg_type = data.get('message_type', 'text')
-            print(f"DEBUG: Receiving message from {self.scope['user'].username}: {content}")
+            reply_to_id = data.get('replied_to_id')
+            print(f"DEBUG: Receiving message from {self.scope['user'].username}: {content} (Reply to: {reply_to_id})")
             
             # Save to DB first
-            msg = await self.save_message(content, msg_type)
+            msg = await self.save_message(content, msg_type, reply_to_id)
             
+            reply_data = None
+            if msg.replied_to:
+                reply_data = {
+                    'id': msg.replied_to.id,
+                    'content': msg.replied_to.content if not msg.replied_to.is_deleted else "Message deleted",
+                    'sender_id': msg.replied_to.sender.id,
+                }
+
             # Broadcast to group
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -197,6 +206,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         'message_type': msg.message_type,
                         'status': msg.status,
                         'created_at': str(msg.created_at),
+                        'replied_to': reply_data,
+                        'is_forwarded': msg.is_forwarded,
+                        'is_deleted': msg.is_deleted,
                     },
                     'sender_channel': self.channel_name
                 }
@@ -272,6 +284,12 @@ class ChatConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
 
+    async def message_deleted(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'message_deleted',
+            'data': event['data']
+        }))
+
     @database_sync_to_async
     def check_participant(self, user):
         return Conversation.objects.filter(id=self.conversation_id, participants=user).exists()
@@ -282,14 +300,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
         return conv.participants.exclude(id=self.scope['user'].id).first()
 
     @database_sync_to_async
-    def save_message(self, content, msg_type):
+    def save_message(self, content, msg_type, reply_to_id=None):
         conv = Conversation.objects.get(id=self.conversation_id)
+        replied_to = None
+        if reply_to_id:
+            try:
+                replied_to = ChatMessage.objects.get(id=reply_to_id)
+            except ChatMessage.DoesNotExist:
+                pass
+
         msg = ChatMessage.objects.create(
-            conversation=conv,
+            conversation_id=self.conversation_id,
             sender=self.scope['user'],
             content=content,
             message_type=msg_type,
-            status='sent'
+            replied_to=replied_to,
+            is_forwarded=False,
+            is_deleted=False
         )
         conv.last_message_content = content
         conv.last_message_time = timezone.now()
