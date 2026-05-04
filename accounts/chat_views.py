@@ -9,6 +9,7 @@ from django.db.models import Q, Count
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 from .fcm_utils import send_push_notification
+from .consumers import ChatConsumer
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -156,18 +157,23 @@ def toggle_reaction(request, message_id):
 
     if request.method == 'POST':
         # Add reaction (toggle behavior is handled by frontend, but we ensure uniqueness here)
-        MessageReaction.objects.get_or_create(
+        reaction, created = MessageReaction.objects.get_or_create(
             message=message,
             user=request.user,
             emoji=emoji
         )
+        if created:
+            send_reaction_notification(message, request.user, emoji, "added")
     elif request.method == 'DELETE':
         # Remove reaction
-        MessageReaction.objects.filter(
+        reactions = MessageReaction.objects.filter(
             message=message,
             user=request.user,
             emoji=emoji
-        ).delete()
+        )
+        if reactions.exists():
+            reactions.delete()
+            send_reaction_notification(message, request.user, emoji, "removed")
 
     # Broadcast update
     broadcast_reaction_update(message)
@@ -198,6 +204,38 @@ def broadcast_reaction_update(message):
             }
         }
     )
+
+def send_reaction_notification(message, sender, emoji, action):
+    """Helper to send FCM for reactions."""
+    other_participants = message.conversation.participants.exclude(id=sender.id)
+    title = sender.username
+    if action == "added":
+        body = f"Reacted {emoji} to a message"
+    else:
+        body = f"Removed reaction {emoji} from a message"
+
+    for user in other_participants:
+        # Check if user is active in this chat room to suppress FCM
+        active_in_room = ChatConsumer.active_users.get(str(message.conversation.id), set())
+        if user.id in active_in_room:
+            print(f"DEBUG: Skipping reaction FCM for {user.username} (active in chat)")
+            continue
+
+        try:
+            send_push_notification(
+                user,
+                title=title,
+                body=body,
+                data={
+                    'type': 'chat',
+                    'conversation_id': str(message.conversation.id),
+                    'sender': sender.username,
+                    'is_reaction': 'true',
+                    'emoji': emoji
+                }
+            )
+        except Exception as e:
+            print(f"DEBUG: Reaction notification failed for {user.username}: {e}")
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -294,18 +332,28 @@ def forward_message(request):
     # Send Push Notification to other user
     other_user = target_conv.participants.exclude(id=request.user.id).first()
     if other_user:
+        # Check if user is active in this chat room to suppress FCM
+        active_in_room = ChatConsumer.active_users.get(str(target_conv.id), set())
+        if other_user.id not in active_in_room:
+            try:
+                send_push_notification(
+                    other_user,
+                    title=request.user.username,
+                    body="Forwarded a message to you",
+                    data={
+                        'type': 'chat',
+                        'conversation_id': str(target_conv.id),
+                        'sender': request.user.username,
+                        'is_forwarded': 'true'
+                    }
+                )
+            except Exception as e:
+                print(f"DEBUG: Notification failed: {e}")
+        else:
+            print(f"DEBUG: Skipping forward FCM for {other_user.username} as they are active in chat.")
+
+        # Also send global notification via WebSocket for unread badges
         try:
-            send_push_notification(
-                other_user,
-                title=f"Forwarded message from {request.user.username}",
-                body=new_msg.content[:100],
-                data={
-                    'type': 'chat',
-                    'conversation_id': str(target_conv.id),
-                    'sender': request.user.username,
-                }
-            )
-            # Also send global notification via WebSocket for unread badges
             channel_layer = get_channel_layer()
             async_to_sync(channel_layer.group_send)(
                 f'user_{other_user.id}'.replace(' ', '_'),
@@ -319,6 +367,6 @@ def forward_message(request):
                 }
             )
         except Exception as e:
-            print(f"DEBUG: Notification failed: {e}")
+            print(f"DEBUG: Global notification failed: {e}")
 
     return Response({"status": "success", "message_id": new_msg.id})

@@ -138,7 +138,10 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
 
-class ChatConsumer(AsyncWebsocketConsumer):
+    # In-memory tracking of active users in each chat room
+    # conversation_id -> set of user_ids
+    active_users = {}
+
     async def connect(self):
         self.conversation_id = self.scope['url_route']['kwargs']['conversation_id']
         self.room_group_name = f'chat_{self.conversation_id}'
@@ -153,17 +156,37 @@ class ChatConsumer(AsyncWebsocketConsumer):
             await self.close()
             return
 
+        self.user_id = user.id
+
         await self.channel_layer.group_add(
             self.room_group_name,
             self.channel_name
         )
+
+        # Track active user
+        conv_id_str = str(self.conversation_id)
+        if conv_id_str not in ChatConsumer.active_users:
+            ChatConsumer.active_users[conv_id_str] = set()
+        ChatConsumer.active_users[conv_id_str].add(self.user_id)
+
         await self.accept()
+        print(f"WS CONNECT: User {self.user_id} joined room {self.room_group_name}")
 
     async def disconnect(self, close_code):
+        # Leave room group
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
+
+        # Untrack active user
+        conv_id_str = str(self.conversation_id)
+        if hasattr(self, 'user_id') and conv_id_str in ChatConsumer.active_users:
+            ChatConsumer.active_users[conv_id_str].discard(self.user_id)
+            if not ChatConsumer.active_users[conv_id_str]:
+                del ChatConsumer.active_users[conv_id_str]
+
+        print(f"WS DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left room {self.room_group_name}")
 
     async def receive(self, text_data):
         try:
@@ -230,24 +253,36 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     }
                 )
                 
-                # Also send Push Notification via FCM
-                await self.send_fcm_notification(other_user, content)
+                # Also send Push Notification via FCM (only if NOT active in chat)
+                is_reply = reply_to_id is not None
+                active_in_room = ChatConsumer.active_users.get(str(self.conversation_id), set())
+                if other_user.id not in active_in_room:
+                    await self.send_fcm_notification(other_user, content, is_reply=is_reply)
+                else:
+                    print(f"DEBUG: Skipping FCM for {other_user.username} as they are active in chat.")
             else:
                 print("DEBUG: No other participant found in this conversation.")
 
-    async def send_fcm_notification(self, other_user, content):
+    async def send_fcm_notification(self, other_user, content, is_reply=False):
         print(f"DEBUG: Entering send_fcm_notification for user {other_user.username}...")
         try:
             from asgiref.sync import sync_to_async
-            # Call it directly to see if it even starts
+            
+            title = self.scope['user'].username
+            if is_reply:
+                body = f"Replied to a message: {content[:40]}"
+            else:
+                body = content[:100]
+
             await sync_to_async(send_push_notification, thread_sensitive=False)(
                 other_user,
-                title=f"New message from {self.scope['user'].username}",
-                body=content[:100],
+                title=title,
+                body=body,
                 data={
                     'type': 'chat',
                     'conversation_id': str(self.conversation_id),
                     'sender': self.scope['user'].username,
+                    'is_reply': 'true' if is_reply else 'false'
                 }
             )
             print(f"DEBUG: Finished calling send_push_notification for {other_user.username}")
