@@ -138,6 +138,7 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
 
+class ChatConsumer(AsyncWebsocketConsumer):
     # In-memory tracking of active users in each chat room
     # conversation_id -> set of user_ids
     active_users = {}
