@@ -220,9 +220,23 @@ class ChatConsumer(AsyncWebsocketConsumer):
             reply_to_id = data.get('replied_to_id')
             print(f"DEBUG: Receiving message from {self.scope['user'].username}: {content} (Reply to: {reply_to_id})")
             
-            # Save to DB first
+            # 1. Save to DB first
             msg = await self.save_message(content, msg_type, reply_to_id)
             
+            # 2. IMMEDIATELY send FCM Push Notification (Synchronous-like via sync_to_async)
+            # Fetch receiver FCM token fresh from DB every time (handled inside send_push_notification)
+            other_user = await self.get_other_participant()
+            if other_user:
+                is_reply = reply_to_id is not None
+                active_in_room = ChatConsumer.active_users.get(str(self.conversation_id), set())
+                if other_user.id not in active_in_room:
+                    # We don't await this to keep the WS responsive, but it starts immediately
+                    import asyncio
+                    asyncio.create_task(self.send_fcm_notification(other_user, content, is_reply=is_reply))
+                else:
+                    print(f"DEBUG: Skipping FCM for {other_user.username} as they are active in chat.")
+
+            # 3. Broadcast to group
             reply_data = None
             if msg.replied_to:
                 reply_data = {
@@ -231,7 +245,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'sender_id': msg.replied_to.sender.id,
                 }
 
-            # Broadcast to group
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -251,10 +264,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 }
             )
 
-            # Notify the other participant via NotificationConsumer for background/global alerts
-            other_user = await self.get_other_participant()
+            # 4. Notify the other participant via NotificationConsumer for unread badges
             if other_user:
-                print(f"DEBUG: Found other participant: {other_user.username}. Sending notifications...")
                 await self.channel_layer.group_send(
                     f'user_{other_user.id}'.replace(' ', '_'),
                     {
@@ -266,16 +277,6 @@ class ChatConsumer(AsyncWebsocketConsumer):
                         }
                     }
                 )
-                
-                # Also send Push Notification via FCM (only if NOT active in chat)
-                is_reply = reply_to_id is not None
-                active_in_room = ChatConsumer.active_users.get(str(self.conversation_id), set())
-                if other_user.id not in active_in_room:
-                    await self.send_fcm_notification(other_user, content, is_reply=is_reply)
-                else:
-                    print(f"DEBUG: Skipping FCM for {other_user.username} as they are active in chat.")
-            else:
-                print("DEBUG: No other participant found in this conversation.")
 
     async def send_fcm_notification(self, other_user, content, is_reply=False):
         print(f"DEBUG: Entering send_fcm_notification for user {other_user.username}...")

@@ -174,10 +174,10 @@ def toggle_reaction(request, message_id):
         if reaction_deleted:
             reactions.delete()
 
-    # Broadcast update via WebSockets immediately
+    # 1. Broadcast update via WebSockets immediately
     broadcast_reaction_update(message)
 
-    # Then send slower FCM push notifications
+    # 2. IMMEDIATELY send FCM push notifications synchronously
     if request.method == 'POST' and created:
         send_reaction_notification(message, request.user, emoji, "added")
     elif request.method == 'DELETE' and reaction_deleted:
@@ -356,11 +356,13 @@ def forward_message(request):
         except Exception as e:
             print(f"DEBUG: Global notification failed: {e}")
 
+        # 3. IMMEDIATELY Send Push Notification to other user (Synchronous)
         # Check if user is active in this chat room to suppress FCM
         from .consumers import ChatConsumer
         active_in_room = ChatConsumer.active_users.get(str(target_conv.id), set())
         if other_user.id not in active_in_room:
             try:
+                # This is already synchronous as it's a Django view
                 send_push_notification(
                     other_user,
                     title=request.user.username,
@@ -374,7 +376,7 @@ def forward_message(request):
                     }
                 )
             except Exception as e:
-                print(f"DEBUG: Notification failed: {e}")
+                print(f"FCM ERROR (Forward): {e}")
         else:
             print(f"DEBUG: Skipping forward FCM for {other_user.username} as they are active in chat.")
 

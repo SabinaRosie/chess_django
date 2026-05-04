@@ -114,13 +114,13 @@ def respond_invitation(request):
             status='active'
         )
 
-        # Notify BOTH players via WebSocket to start the game
+        # 1. Notify BOTH players via WebSocket to start the game
         channel_layer = get_channel_layer()
-        # Notify Sender
+        # Notify Sender (Renamed event type as per requirement)
         async_to_sync(channel_layer.group_send)(
             f'user_{invitation.sender.id}'.replace(' ', '_'),
             {
-                'type': 'invitation_accepted',
+                'type': 'invitation:accepted', # Changed from invitation_accepted
                 'data': {
                     'game_id': str(game.id),
                     'opponent_id': request.user.id,
@@ -133,7 +133,7 @@ def respond_invitation(request):
         async_to_sync(channel_layer.group_send)(
             f'user_{request.user.id}'.replace(' ', '_'),
             {
-                'type': 'invitation_accepted',
+                'type': 'invitation:accepted', # Changed from invitation_accepted
                 'data': {
                     'game_id': str(game.id),
                     'opponent_id': invitation.sender.id,
@@ -142,6 +142,22 @@ def respond_invitation(request):
                 }
             }
         )
+
+        # 2. IMMEDIATELY send FCM Push Notification to Sender
+        try:
+            send_push_notification(
+                invitation.sender,
+                title="Invitation Accepted",
+                body=f"{request.user.username} accepted your chess invitation! Get ready to play.",
+                data={
+                    'type': 'game_invitation_accepted',
+                    'game_id': str(game.id),
+                    'opponent_id': str(request.user.id),
+                    'opponent_name': request.user.username,
+                }
+            )
+        except Exception as e:
+            print(f"FCM ERROR (Invite Accept): {e}")
 
         return Response({"status": "accepted", "game_id": str(game.id)})
 
