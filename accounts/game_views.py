@@ -14,7 +14,7 @@ import random
 @permission_classes([IsAuthenticated])
 def list_users(request):
     """List all users except the current one, with online status."""
-    users = User.objects.exclude(id=request.user.id).select_related('profile') # Assuming a profile model exists or just use user
+    users = User.objects.exclude(id=request.user.id)
     # For now, let's just return basic info. If profile photo exists, use it.
     data = []
     for user in users:
