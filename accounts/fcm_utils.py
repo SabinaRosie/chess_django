@@ -36,49 +36,43 @@ def initialize_firebase():
 initialize_firebase()
 
 def send_push_notification(user, title, body, data=None):
-    """Send a push notification to all devices registered for a user."""
-    print(f"FCM DEBUG: Function 'send_push_notification' STARTED for user {user.username} (ID: {user.id})")
-    tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
-    print(f"FCM DEBUG: Found {len(tokens)} tokens for user {user.username}")
-    if not tokens:
-        print(f"FCM DEBUG: Skipping send because 0 tokens were found for {user.username}")
-        return
-    
-    if not firebase_admin._apps:
-        print("ERROR: Firebase Admin SDK not initialized.")
-        return
-
-    print(f"FCM DEBUG: Preparing message for tokens: {list(tokens)}")
-    message_payload = messaging.MulticastMessage(
-        notification=messaging.Notification(
-            title=title,
-            body=body,
-        ),
-        android=messaging.AndroidConfig(
-            priority='high',
-            notification=messaging.AndroidNotification(
-                channel_id='high_importance_channel',
-                # Priority can be 'min', 'low', 'default', 'high', 'max'
-                priority='max', 
-                default_vibrate_timings=True,
-                default_sound=True,
-            ),
-        ),
-        data=data or {},
-        tokens=list(tokens),
-    )
-    
-    try:
-        print("FCM DEBUG: Calling messaging.send_each_for_multicast...")
-        response = messaging.send_each_for_multicast(message_payload)
-        print(f"FCM DEBUG: Response received! Success: {response.success_count}, Failure: {response.failure_count}")
+    """Send a push notification to all devices registered for a user with retry logic."""
+    def _attempt_send():
+        # Re-fetch tokens freshly to ensure we have the latest
+        tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
+        if not tokens:
+            print(f"FCM DEBUG: No tokens found for {user.username}")
+            return False, "no_tokens"
         
-        if response.failure_count > 0:
-            for index, result in enumerate(response.responses):
-                if not result.success:
-                    print(f"FCM DEBUG: Token {index} failed with error: {result.exception}")
-            
-    except Exception as e:
-        print(f"FCM DEBUG: CRITICAL ERROR sending FCM message: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        if not firebase_admin._apps:
+            return False, "not_initialized"
+
+        message_payload = messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            android=messaging.AndroidConfig(
+                priority='high',
+                notification=messaging.AndroidNotification(
+                    channel_id='high_importance_channel',
+                    priority='max', 
+                    default_vibrate_timings=True,
+                    default_sound=True,
+                ),
+            ),
+            data=data or {},
+            tokens=tokens,
+        )
+        
+        try:
+            response = messaging.send_each_for_multicast(message_payload)
+            print(f"FCM DEBUG: Sent to {user.username}. Success: {response.success_count}, Failure: {response.failure_count}")
+            return response.failure_count < len(tokens), "partial_or_full_success"
+        except Exception as e:
+            print(f"FCM DEBUG: Error: {str(e)}")
+            return False, str(e)
+
+    # First attempt
+    success, reason = _attempt_send()
+    if not success and reason != "no_tokens":
+        # Immediate retry once if it wasn't just a "no tokens" issue
+        print(f"FCM DEBUG: Retrying send to {user.username}...")
+        _attempt_send()

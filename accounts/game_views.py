@@ -67,17 +67,17 @@ def send_invitation(request):
         }
     )
 
-    # 2. Send FCM Push Notification (Immediately)
+    # 2. Send FCM Push Notification (AFTER record is saved)
     try:
         send_push_notification(
             receiver,
             title=request.user.username,
             body="Invited you to play chess!",
             data={
-                'type': 'game_invite',
+                'type': 'game_invitation',
                 'invitation_id': str(invitation.id),
                 'sender_id': str(request.user.id),
-                'sender_username': request.user.username,
+                'sender_name': request.user.username,
             }
         )
     except Exception as e:
@@ -101,7 +101,7 @@ def respond_invitation(request):
         return Response({"error": "Invitation not found"}, status=404)
 
     if invitation.status != 'pending':
-        return Response({"error": "Invitation already handled or expired"}, status=400)
+        return Response({"error": "Invitation already handled"}, status=400)
 
     if response_status == 'accepted':
         invitation.status = 'accepted'
@@ -188,3 +188,21 @@ def cancel_invitation(request):
         return Response({"status": "cancelled"})
     except GameInvitation.DoesNotExist:
         return Response({"error": "Invitation not found or not pending"}, status=404)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_pending_invitations(request):
+    """List all pending invitations received by the current user."""
+    invitations = GameInvitation.objects.filter(receiver=request.user, status='pending').order_by('-created_at')
+    
+    data = []
+    for inv in invitations:
+        data.append({
+            'id': inv.id,
+            'sender': {
+                'id': inv.sender.id,
+                'username': inv.sender.username,
+                'photo_url': getattr(inv.sender, 'profile_photo_url', None),
+            },
+            'created_at': inv.created_at,
+        })
+    return Response(data)

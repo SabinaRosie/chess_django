@@ -294,8 +294,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 body=body,
                 data={
                     'type': 'chat',
-                    'conversation_id': str(self.conversation_id),
-                    'sender': self.scope['user'].username,
+                    'chat_room_id': str(self.conversation_id),
+                    'sender_id': str(self.scope['user'].id),
+                    'sender_name': self.scope['user'].username,
                     'is_reply': 'true' if is_reply else 'false'
                 }
             )

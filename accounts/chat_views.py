@@ -234,8 +234,9 @@ def send_reaction_notification(message, sender, emoji, action):
                 body=body,
                 data={
                     'type': 'chat',
-                    'conversation_id': str(message.conversation.id),
-                    'sender': sender.username,
+                    'chat_room_id': str(message.conversation.id),
+                    'sender_id': str(sender.id),
+                    'sender_name': sender.username,
                     'is_reaction': 'true',
                     'emoji': emoji
                 }
@@ -366,8 +367,9 @@ def forward_message(request):
                     body="Forwarded a message to you",
                     data={
                         'type': 'chat',
-                        'conversation_id': str(target_conv.id),
-                        'sender': request.user.username,
+                        'chat_room_id': str(target_conv.id),
+                        'sender_id': str(request.user.id),
+                        'sender_name': request.user.username,
                         'is_forwarded': 'true'
                     }
                 )
