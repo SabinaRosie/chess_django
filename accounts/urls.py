@@ -7,6 +7,7 @@ from .views import (
     get_turn_credentials, register_fcm_token,
 )
 from . import chat_views
+from . import game_views
 
 urlpatterns = [
     path('signup', signup),
@@ -38,4 +39,10 @@ urlpatterns = [
     path('chat/messages/<int:message_id>/delete', chat_views.delete_message),
     path('chat/forward', chat_views.forward_message),
     path('register-fcm-token', register_fcm_token),
+
+    # Game Endpoints
+    path('game/users', game_views.list_users),
+    path('game/invite', game_views.send_invitation),
+    path('game/respond', game_views.respond_invitation),
+    path('game/cancel', game_views.cancel_invitation),
 ]

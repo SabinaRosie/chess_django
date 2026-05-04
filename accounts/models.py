@@ -133,3 +133,44 @@ class MessageReaction(models.Model):
     def __str__(self):
         return f"{self.user.username} reacted {self.emoji} to message {self.message.id}"
 
+
+class GameInvitation(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('accepted', 'Accepted'),
+        ('declined', 'Declined'),
+        ('expired', 'Expired'),
+        ('cancelled', 'Cancelled'),
+    ]
+    sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invitations_sent')
+    receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invitations_received')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def is_expired(self):
+        return self.status == 'pending' and timezone.now() > self.created_at + timedelta(seconds=60)
+
+    def __str__(self):
+        return f"{self.sender.username} -> {self.receiver.username} ({self.status})"
+
+
+class ChessGame(models.Model):
+    STATUS_CHOICES = [
+        ('active', 'Active'),
+        ('draw', 'Draw'),
+        ('white_win', 'White Win'),
+        ('black_win', 'Black Win'),
+        ('aborted', 'Aborted'),
+    ]
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    white_player = models.ForeignKey(User, on_delete=models.CASCADE, related_name='games_as_white')
+    black_player = models.ForeignKey(User, on_delete=models.CASCADE, related_name='games_as_black')
+    fen = models.TextField(default='rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1')
+    pgn = models.TextField(blank=True, default='')
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='active')
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_move_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"Game {self.id}: {self.white_player.username} vs {self.black_player.username}"
+

@@ -365,3 +365,187 @@ class ChatConsumer(AsyncWebsocketConsumer):
             conversation_id=self.conversation_id,
             status__in=['sent', 'delivered']
         ).exclude(sender=self.scope['user']).update(status='seen')
+
+
+class GameConsumer(AsyncWebsocketConsumer):
+    # Track connected players per game: game_id -> {user_id: channel_name}
+    game_sessions = {}
+
+    async def connect(self):
+        self.game_id = self.scope['url_route']['kwargs']['game_id']
+        self.room_group_name = f'game_{self.game_id}'
+        self.user_id = self.scope['user'].id
+
+        # Verify player is part of the game
+        is_player = await self.check_player()
+        if not is_player:
+            await self.close()
+            return
+
+        # Join room group
+        await self.channel_layer.group_add(
+            self.room_group_name,
+            self.channel_name
+        )
+
+        # Register session
+        if self.game_id not in GameConsumer.game_sessions:
+            GameConsumer.game_sessions[self.game_id] = {}
+        GameConsumer.game_sessions[self.game_id][self.user_id] = self.channel_name
+
+        await self.accept()
+        print(f"GAME CONNECT: User {self.user_id} joined game {self.game_id}")
+
+        # Notify opponent of reconnection if they were waiting
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'player_reconnected',
+                'user_id': self.user_id
+            }
+        )
+
+    async def disconnect(self, close_code):
+        # Leave room group
+        await self.channel_layer.group_discard(
+            self.room_group_name,
+            self.channel_name
+        )
+
+        # Unregister session
+        if hasattr(self, 'game_id') and self.game_id in GameConsumer.game_sessions:
+            if self.user_id in GameConsumer.game_sessions[self.game_id]:
+                del GameConsumer.game_sessions[self.game_id][self.user_id]
+
+        # Notify opponent of disconnection
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'player_disconnected',
+                'user_id': self.user_id
+            }
+        )
+        print(f"GAME DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left game {getattr(self, 'game_id', 'unknown')}")
+
+    async def receive(self, text_data):
+        try:
+            data = json.loads(text_data)
+        except:
+            return
+        action = data.get('action')
+
+        if action == 'move':
+            # Broadcast move to opponent
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_move',
+                    'move': data.get('move'), # e.g., 'e2e4'
+                    'fen': data.get('fen'),   # Current board state
+                    'sender_id': self.user_id
+                }
+            )
+            # Update DB state
+            await self.update_game_state(data.get('fen'), data.get('move'))
+
+        elif action == 'resign':
+            opponent_id = await self.get_opponent_id()
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_over',
+                    'reason': 'resignation',
+                    'winner_id': opponent_id,
+                    'loser_id': self.user_id
+                }
+            )
+            color = await self.get_color()
+            await self.end_game('black_win' if color == 'white' else 'white_win')
+
+        elif action == 'offer_draw':
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'draw_offered_relay',
+                    'sender_id': self.user_id
+                }
+            )
+
+        elif action == 'accept_draw':
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_over',
+                    'reason': 'draw_accepted'
+                }
+            )
+            await self.end_game('draw')
+
+    async def game_move(self, event):
+        if self.user_id != event['sender_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'move',
+                'move': event['move'],
+                'fen': event['fen']
+            }))
+
+    async def game_over(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'game_over',
+            'reason': event.get('reason'),
+            'winner_id': event.get('winner_id')
+        }))
+
+    async def draw_offered_relay(self, event):
+        if self.user_id != event['sender_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'draw_offered'
+            }))
+
+    async def player_disconnected(self, event):
+        if self.user_id != event['user_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'opponent_disconnected'
+            }))
+
+    async def player_reconnected(self, event):
+        if self.user_id != event['user_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'opponent_reconnected'
+            }))
+
+    @database_sync_to_async
+    def check_player(self):
+        try:
+            from .models import ChessGame
+            game = ChessGame.objects.get(id=self.game_id)
+            return game.white_player_id == self.user_id or game.black_player_id == self.user_id
+        except:
+            return False
+
+    @database_sync_to_async
+    def get_opponent_id(self):
+        from .models import ChessGame
+        game = ChessGame.objects.get(id=self.game_id)
+        return game.black_player_id if game.white_player_id == self.user_id else game.white_player_id
+
+    @database_sync_to_async
+    def get_color(self):
+        from .models import ChessGame
+        game = ChessGame.objects.get(id=self.game_id)
+        return 'white' if game.white_player_id == self.user_id else 'black'
+
+    @database_sync_to_async
+    def update_game_state(self, fen, move):
+        from .models import ChessGame
+        game = ChessGame.objects.get(id=self.game_id)
+        game.fen = fen
+        game.pgn += f" {move}"
+        game.save()
+
+    @database_sync_to_async
+    def end_game(self, status):
+        from .models import ChessGame
+        game = ChessGame.objects.get(id=self.game_id)
+        game.status = status
+        game.save()
