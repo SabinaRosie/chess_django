@@ -111,38 +111,23 @@ def respond_invitation(request):
             status='active'
         )
 
-        # 1. Notify BOTH players via WebSocket to start the game
+        # 1. Notify Sender via WebSocket to start the game
         channel_layer = get_channel_layer()
         sender_group = f'user_{invitation.sender.id}'.replace(' ', '_')
-        receiver_group = f'user_{request.user.id}'.replace(' ', '_')
         
-        print(f"GAME DEBUG: Notifying players. Sender Group: {sender_group}, Receiver Group: {receiver_group}")
-
+        print(f"GAME DEBUG: Notifying sender. Sender Group: {sender_group}")
+ 
         # Notify Sender (White)
         async_to_sync(channel_layer.group_send)(
             sender_group,
             {
-                'type': 'invitation:accepted',
+                'type': 'invitation_accepted',
                 'data': {
                     'game_id': str(game.id),
                     'opponent_id': request.user.id,
                     'opponent_username': request.user.username,
                     'opponent_photo': getattr(request.user, 'profile_photo_url', None),
                     'color': 'white'
-                }
-            }
-        )
-        # Notify Receiver (Black - Self)
-        async_to_sync(channel_layer.group_send)(
-            receiver_group,
-            {
-                'type': 'invitation:accepted',
-                'data': {
-                    'game_id': str(game.id),
-                    'opponent_id': invitation.sender.id,
-                    'opponent_username': invitation.sender.username,
-                    'opponent_photo': getattr(invitation.sender, 'profile_photo_url', None),
-                    'color': 'black'
                 }
             }
         )
