@@ -430,6 +430,18 @@ class GameConsumer(AsyncWebsocketConsumer):
             }
         )
 
+        # If both players are now connected, signal game start
+        if len(GameConsumer.game_sessions[self.game_id]) == 2:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_start',
+                    'data': {
+                        'message': 'Both players are ready!'
+                    }
+                }
+            )
+
     async def disconnect(self, close_code):
         # Leave room group
         await self.channel_layer.group_discard(
