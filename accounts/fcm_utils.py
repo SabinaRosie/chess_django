@@ -56,6 +56,12 @@ def send_push_notification(user, title, body, data=None, async_send=True):
             print(f"FCM ERROR: Firebase not initialized. Cannot send to {user.username}")
             return
 
+        # 🔹 Ensure all data values are strings (FCM requirement)
+        safe_data = {}
+        if data:
+            for k, v in data.items():
+                safe_data[str(k)] = str(v) if v is not None else ""
+
         message_payload = messaging.MulticastMessage(
             notification=messaging.Notification(title=title, body=body),
             android=messaging.AndroidConfig(
@@ -67,7 +73,7 @@ def send_push_notification(user, title, body, data=None, async_send=True):
                     default_sound=True,
                 ),
             ),
-            data=data or {},
+            data=safe_data,
             tokens=tokens,
         )
         

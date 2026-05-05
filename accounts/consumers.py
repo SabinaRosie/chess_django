@@ -151,6 +151,18 @@ class NotificationConsumer(AsyncWebsocketConsumer):
             'data': event['data']
         }))
 
+    async def game_invitation(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'game_invitation',
+            'data': event['data']
+        }))
+
+    async def invitation_accepted(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'invitation:accepted',
+            'data': event['data']
+        }))
+
 class ChatConsumer(AsyncWebsocketConsumer):
     # In-memory tracking of active users in each chat room
     # conversation_id -> set of user_ids
@@ -387,6 +399,11 @@ class GameConsumer(AsyncWebsocketConsumer):
     game_sessions = {}
 
     async def connect(self):
+        if self.scope["user"].is_anonymous:
+            print(f"GAME DEBUG: REJECTED. Anonymous user attempting to connect to game {self.scope['url_route']['kwargs']['game_id']}")
+            await self.close()
+            return
+            
         self.game_id = self.scope['url_route']['kwargs']['game_id']
         self.room_group_name = f'game_{self.game_id}'
         self.user_id = self.scope['user'].id

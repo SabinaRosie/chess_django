@@ -157,8 +157,8 @@ def respond_invitation(request):
                 'type': 'game_invitation_accepted',
                 'game_id': str(game.id),
                 'opponent_id': str(request.user.id),
-                'opponent_name': request.user.username,
-                'opponent_photo': getattr(request.user, 'profile_photo_url', None),
+                'opponent_name': str(request.user.username),
+                'opponent_photo': str(getattr(request.user, 'profile_photo_url', '')),
                 'color': 'white',
             }
         )
@@ -173,8 +173,8 @@ def respond_invitation(request):
                 'type': 'game_invitation_accepted',
                 'game_id': str(game.id),
                 'opponent_id': str(invitation.sender.id),
-                'opponent_name': invitation.sender.username,
-                'opponent_photo': getattr(invitation.sender, 'profile_photo_url', None),
+                'opponent_name': str(invitation.sender.username),
+                'opponent_photo': str(getattr(invitation.sender, 'profile_photo_url', '')),
                 'color': 'black',
             }
         )
