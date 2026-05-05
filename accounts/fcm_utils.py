@@ -35,46 +35,68 @@ def initialize_firebase():
 # Call initialization
 initialize_firebase()
 
-def send_push_notification(user, title, body, data=None):
-    """Send a push notification to all devices registered for a user synchronously."""
-    # Re-fetch tokens freshly to ensure we have the latest
-    tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
-    if not tokens:
-        print(f"FCM ERROR: No tokens found for user {user.username} (ID: {user.id})")
-        return False
+import threading
 
-    if not firebase_admin._apps:
-        print(f"FCM ERROR: Firebase not initialized. Cannot send to {user.username}")
-        return False
-
-    message_payload = messaging.MulticastMessage(
-        notification=messaging.Notification(title=title, body=body),
-        android=messaging.AndroidConfig(
-            priority='high',
-            notification=messaging.AndroidNotification(
-                channel_id='high_importance_channel',
-                priority='max', 
-                default_vibrate_timings=True,
-                default_sound=True,
-            ),
-        ),
-        data=data or {},
-        tokens=tokens,
-    )
+def send_push_notification(user, title, body, data=None, async_send=True):
+    """Send a push notification to all devices registered for a user."""
     
-    try:
-        response = messaging.send_each_for_multicast(message_payload)
-        if response.failure_count > 0:
-            print(f"FCM WARNING: Sent to {user.username}. Success: {response.success_count}, Failure: {response.failure_count}")
-            # Log specific failures if needed (e.g. invalid tokens)
-            for idx, resp in enumerate(response.responses):
-                if not resp.success:
-                    print(f"FCM TOKEN FAILURE: Token {tokens[idx][:10]}... failed with error: {resp.exception}")
-        else:
-            print(f"FCM SUCCESS: Sent to {user.username} ({response.success_count} devices)")
-        return response.success_count > 0
-    except Exception as e:
-        print(f"FCM CRITICAL ERROR for {user.username}: {str(e)}")
-        import traceback
-        traceback.print_exc()
-        return False
+    def _send():
+        import time
+        # Re-fetch tokens freshly to ensure we have the latest
+        tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
+        if not tokens:
+            print(f"FCM ERROR: No tokens found for user {user.username} (ID: {user.id})")
+            return
+
+        if not firebase_admin._apps:
+            print(f"FCM ERROR: Firebase not initialized. Cannot send to {user.username}")
+            return
+
+        message_payload = messaging.MulticastMessage(
+            notification=messaging.Notification(title=title, body=body),
+            android=messaging.AndroidConfig(
+                priority='high',
+                notification=messaging.AndroidNotification(
+                    channel_id='high_importance_channel',
+                    priority='max', 
+                    default_vibrate_timings=True,
+                    default_sound=True,
+                ),
+            ),
+            data=data or {},
+            tokens=tokens,
+        )
+        
+        success = False
+        attempts = 0
+        while not success and attempts < 2:
+            try:
+                attempts += 1
+                response = messaging.send_each_for_multicast(message_payload)
+                if response.failure_count > 0:
+                    # Log specific failures
+                    for idx, resp in enumerate(response.responses):
+                        if not resp.success:
+                            print(f"FCM TOKEN FAILURE: Token {tokens[idx][:10]}... failed with error: {resp.exception}")
+                    
+                    if response.success_count > 0:
+                        success = True # At least one device received it
+                else:
+                    print(f"FCM SUCCESS: Sent to {user.username} ({response.success_count} devices)")
+                    success = True
+                
+                if not success and attempts == 1:
+                    print(f"FCM RETRY: First attempt failed for {user.username}, retrying in 1s...")
+                    time.sleep(1)
+            except Exception as e:
+                print(f"FCM CRITICAL ERROR for {user.username} (Attempt {attempts}): {str(e)}")
+                if attempts == 1:
+                    time.sleep(1)
+
+    if async_send:
+        thread = threading.Thread(target=_send)
+        thread.start()
+        return True
+    else:
+        _send()
+        return True

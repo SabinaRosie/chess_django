@@ -67,21 +67,18 @@ def send_invitation(request):
         }
     )
 
-    # 2. Send FCM Push Notification (AFTER record is saved)
-    try:
-        send_push_notification(
-            receiver,
-            title=request.user.username,
-            body="Invited you to play chess!",
-            data={
-                'type': 'game_invitation',
-                'invitation_id': str(invitation.id),
-                'sender_id': str(request.user.id),
-                'sender_name': request.user.username,
-            }
-        )
-    except Exception as e:
-        print(f"DEBUG: Invitation FCM failed: {e}")
+    # 2. Send FCM Push Notification (Async by default)
+    send_push_notification(
+        receiver,
+        title=request.user.username,
+        body="Invited you to play chess!",
+        data={
+            'type': 'game_invitation',
+            'invitation_id': str(invitation.id),
+            'sender_id': str(request.user.id),
+            'sender_name': request.user.username,
+        }
+    )
 
     return Response({
         "status": "success",
@@ -144,52 +141,32 @@ def respond_invitation(request):
         )
 
         # 2. IMMEDIATELY send FCM Push Notification to Sender (White)
-        # Fetch sender fresh to ensure we have any profile updates if needed
-        # (Tokens are already fetched fresh in send_push_notification)
-        success = False
-        attempts = 0
-        while not success and attempts < 2:
-            try:
-                attempts += 1
-                success = send_push_notification(
-                    invitation.sender,
-                    title="Challenge Accepted",
-                    body=f"{request.user.username} has accepted your chess challenge! Tap to play now.",
-                    data={
-                        'type': 'game_invitation_accepted',
-                        'game_id': str(game.id),
-                        'opponent_id': str(request.user.id),
-                        'opponent_name': request.user.username,
-                        'color': 'white',
-                    }
-                )
-                if not success and attempts == 1:
-                    print(f"FCM RETRY: First attempt failed for {invitation.sender.username}, retrying immediately...")
-            except Exception as e:
-                print(f"FCM ERROR (Attempt {attempts}) for {invitation.sender.username}: {e}")
-                if attempts == 1:
-                    import time
-                    time.sleep(0.5) # Minimal delay before retry
-        
-        if not success:
-            print(f"FCM CRITICAL: All attempts failed to notify {invitation.sender.username} of acceptance.")
+        send_push_notification(
+            invitation.sender,
+            title="Challenge Accepted",
+            body=f"{request.user.username} has accepted your chess challenge! Tap to play now.",
+            data={
+                'type': 'game_invitation_accepted',
+                'game_id': str(game.id),
+                'opponent_id': str(request.user.id),
+                'opponent_name': request.user.username,
+                'color': 'white',
+            }
+        )
 
         # 3. IMMEDIATELY send FCM Push Notification to Receiver (Black - Self)
-        try:
-            send_push_notification(
-                request.user,
-                title="You Accepted the Challenge",
-                body=f"{invitation.sender.username} is waiting for you to play!",
-                data={
-                    'type': 'game_invitation_accepted',
-                    'game_id': str(game.id),
-                    'opponent_id': str(invitation.sender.id),
-                    'opponent_name': invitation.sender.username,
-                    'color': 'black', # Recipient of this FCM is black
-                }
-            )
-        except Exception as e:
-            print(f"FCM ERROR (Invite Accept - Receiver): {e}")
+        send_push_notification(
+            request.user,
+            title="You Accepted the Challenge",
+            body=f"{invitation.sender.username} is waiting for you to play!",
+            data={
+                'type': 'game_invitation_accepted',
+                'game_id': str(game.id),
+                'opponent_id': str(invitation.sender.id),
+                'opponent_name': invitation.sender.username,
+                'color': 'black',
+            }
+        )
 
         return Response({"status": "accepted", "game_id": str(game.id)})
 
