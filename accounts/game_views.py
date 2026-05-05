@@ -144,21 +144,35 @@ def respond_invitation(request):
         )
 
         # 2. IMMEDIATELY send FCM Push Notification to Sender (White)
-        try:
-            send_push_notification(
-                invitation.sender,
-                title="Challenge Accepted",
-                body=f"{request.user.username} has accepted your chess challenge!",
-                data={
-                    'type': 'game_invitation_accepted',
-                    'game_id': str(game.id),
-                    'opponent_id': str(request.user.id),
-                    'opponent_name': request.user.username,
-                    'color': 'white', # Recipient of this FCM is white
-                }
-            )
-        except Exception as e:
-            print(f"FCM ERROR (Invite Accept - Sender): {e}")
+        # Fetch sender fresh to ensure we have any profile updates if needed
+        # (Tokens are already fetched fresh in send_push_notification)
+        success = False
+        attempts = 0
+        while not success and attempts < 2:
+            try:
+                attempts += 1
+                success = send_push_notification(
+                    invitation.sender,
+                    title="Challenge Accepted",
+                    body=f"{request.user.username} has accepted your chess challenge! Tap to play now.",
+                    data={
+                        'type': 'game_invitation_accepted',
+                        'game_id': str(game.id),
+                        'opponent_id': str(request.user.id),
+                        'opponent_name': request.user.username,
+                        'color': 'white',
+                    }
+                )
+                if not success and attempts == 1:
+                    print(f"FCM RETRY: First attempt failed for {invitation.sender.username}, retrying immediately...")
+            except Exception as e:
+                print(f"FCM ERROR (Attempt {attempts}) for {invitation.sender.username}: {e}")
+                if attempts == 1:
+                    import time
+                    time.sleep(0.5) # Minimal delay before retry
+        
+        if not success:
+            print(f"FCM CRITICAL: All attempts failed to notify {invitation.sender.username} of acceptance.")
 
         # 3. IMMEDIATELY send FCM Push Notification to Receiver (Black - Self)
         try:
@@ -236,6 +250,24 @@ def list_pending_invitations(request):
                 'id': inv.sender.id,
                 'username': inv.sender.username,
                 'photo_url': getattr(inv.sender, 'profile_photo_url', None),
+            },
+            'created_at': inv.created_at,
+        })
+    return Response(data)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def list_sent_invitations(request):
+    """List all pending invitations sent by the current user."""
+    invitations = GameInvitation.objects.filter(sender=request.user, status='pending').order_by('-created_at')
+    
+    data = []
+    for inv in invitations:
+        data.append({
+            'id': inv.id,
+            'receiver': {
+                'id': inv.receiver.id,
+                'username': inv.receiver.username,
+                'photo_url': getattr(inv.receiver, 'profile_photo_url', None),
             },
             'created_at': inv.created_at,
         })
