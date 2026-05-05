@@ -143,21 +143,39 @@ def respond_invitation(request):
             }
         )
 
-        # 2. IMMEDIATELY send FCM Push Notification to Sender
+        # 2. IMMEDIATELY send FCM Push Notification to Sender (White)
         try:
             send_push_notification(
                 invitation.sender,
-                title="Invitation Accepted",
-                body=f"{request.user.username} accepted your chess invitation! Get ready to play.",
+                title="Challenge Accepted",
+                body=f"{request.user.username} has accepted your chess challenge!",
                 data={
                     'type': 'game_invitation_accepted',
                     'game_id': str(game.id),
                     'opponent_id': str(request.user.id),
                     'opponent_name': request.user.username,
+                    'color': 'white', # Recipient of this FCM is white
                 }
             )
         except Exception as e:
-            print(f"FCM ERROR (Invite Accept): {e}")
+            print(f"FCM ERROR (Invite Accept - Sender): {e}")
+
+        # 3. IMMEDIATELY send FCM Push Notification to Receiver (Black - Self)
+        try:
+            send_push_notification(
+                request.user,
+                title="You Accepted the Challenge",
+                body=f"{invitation.sender.username} is waiting for you to play!",
+                data={
+                    'type': 'game_invitation_accepted',
+                    'game_id': str(game.id),
+                    'opponent_id': str(invitation.sender.id),
+                    'opponent_name': invitation.sender.username,
+                    'color': 'black', # Recipient of this FCM is black
+                }
+            )
+        except Exception as e:
+            print(f"FCM ERROR (Invite Accept - Receiver): {e}")
 
         return Response({"status": "accepted", "game_id": str(game.id)})
 
