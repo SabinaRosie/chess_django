@@ -411,6 +411,13 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.accept()
         print(f"GAME CONNECT: User {self.user_id} joined game {self.game_id}")
 
+        # 🔹 Send initial game state to the joining player
+        game_data = await self.get_game_state_data()
+        await self.send(text_data=json.dumps({
+            'type': 'game_sync',
+            'data': game_data
+        }))
+
         # Notify opponent of reconnection if they were waiting
         await self.channel_layer.group_send(
             self.room_group_name,
@@ -431,6 +438,8 @@ class GameConsumer(AsyncWebsocketConsumer):
         if hasattr(self, 'game_id') and self.game_id in GameConsumer.game_sessions:
             if self.user_id in GameConsumer.game_sessions[self.game_id]:
                 del GameConsumer.game_sessions[self.game_id][self.user_id]
+            if not GameConsumer.game_sessions[self.game_id]:
+                del GameConsumer.game_sessions[self.game_id]
 
         # Notify opponent of disconnection
         await self.channel_layer.group_send(
@@ -440,7 +449,7 @@ class GameConsumer(AsyncWebsocketConsumer):
                 'user_id': self.user_id
             }
         )
-        print(f"GAME DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left game {getattr(self, 'game_id', 'unknown')}")
+        print(f"GAME DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left game {getattr(self, 'game_id', 'unknown')} (Code: {close_code})")
 
     async def receive(self, text_data):
         try:
@@ -557,6 +566,25 @@ class GameConsumer(AsyncWebsocketConsumer):
         game.fen = fen
         game.pgn += f" {move}"
         game.save()
+
+    @database_sync_to_async
+    def get_game_state_data(self):
+        from .models import ChessGame
+        game = ChessGame.objects.get(id=self.game_id)
+        
+        opponent_id = game.black_player_id if game.white_player_id == self.user_id else game.white_player_id
+        is_opponent_online = False
+        if self.game_id in GameConsumer.game_sessions:
+            is_opponent_online = opponent_id in GameConsumer.game_sessions[self.game_id]
+            
+        return {
+            'fen': game.fen,
+            'status': game.status,
+            'pgn': game.pgn,
+            'white_player_id': game.white_player_id,
+            'black_player_id': game.black_player_id,
+            'is_opponent_online': is_opponent_online,
+        }
 
     @database_sync_to_async
     def end_game(self, status):

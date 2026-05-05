@@ -45,8 +45,12 @@ def send_push_notification(user, title, body, data=None, async_send=True):
         # Re-fetch tokens freshly to ensure we have the latest
         tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
         if not tokens:
-            print(f"FCM ERROR: No tokens found for user {user.username} (ID: {user.id})")
+            print(f"FCM ERROR: No tokens found for user {user.username} (ID: {user.id}). Cannot send '{title}'")
             return
+
+        print(f"FCM DEBUG: Found {len(tokens)} tokens for {user.username}. Sending '{title}'...")
+        for i, t in enumerate(tokens):
+            print(f"  Token {i+1}: {t[:15]}...")
 
         if not firebase_admin._apps:
             print(f"FCM ERROR: Firebase not initialized. Cannot send to {user.username}")
