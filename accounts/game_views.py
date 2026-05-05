@@ -148,6 +148,7 @@ def respond_invitation(request):
         )
 
         # 2. IMMEDIATELY send FCM Push Notification to Sender (White)
+        print(f"FCM LOG: Attempting to send 'Challenge Accepted' to sender {invitation.sender.username} (ID: {invitation.sender.id})")
         send_push_notification(
             invitation.sender,
             title="Challenge Accepted",
@@ -157,11 +158,13 @@ def respond_invitation(request):
                 'game_id': str(game.id),
                 'opponent_id': str(request.user.id),
                 'opponent_name': request.user.username,
+                'opponent_photo': getattr(request.user, 'profile_photo_url', None),
                 'color': 'white',
             }
         )
+        print(f"FCM LOG: Dispatched 'Challenge Accepted' to sender {invitation.sender.username}")
 
-        # 3. IMMEDIATELY send FCM Push Notification to Receiver (Black - Self)
+        # 3. Optional: Notify Receiver (Self) via FCM as well
         send_push_notification(
             request.user,
             title="You Accepted the Challenge",
@@ -171,6 +174,7 @@ def respond_invitation(request):
                 'game_id': str(game.id),
                 'opponent_id': str(invitation.sender.id),
                 'opponent_name': invitation.sender.username,
+                'opponent_photo': getattr(invitation.sender, 'profile_photo_url', None),
                 'color': 'black',
             }
         )
