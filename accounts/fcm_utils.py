@@ -78,13 +78,22 @@ def send_push_notification(user, title, body, data=None, async_send=True):
                 attempts += 1
                 response = messaging.send_each_for_multicast(message_payload)
                 if response.failure_count > 0:
-                    # Log specific failures
+                    # Log specific failures and cleanup invalid tokens
                     for idx, resp in enumerate(response.responses):
                         if not resp.success:
-                            print(f"FCM TOKEN FAILURE: Token {tokens[idx][:10]}... failed with error: {resp.exception}")
+                            error_code = getattr(resp.exception, 'code', str(resp.exception))
+                            print(f"FCM TOKEN FAILURE: Token {tokens[idx][:10]}... Error: {error_code}")
+                            
+                            # Cleanup stale/invalid tokens
+                            if 'invalid-registration' in str(error_code).lower() or 'not-registered' in str(error_code).lower():
+                                bad_token = tokens[idx]
+                                FCMToken.objects.filter(token=bad_token).delete()
+                                print(f"FCM CLEANUP: Deleted stale token: {bad_token[:15]}...")
                     
                     if response.success_count > 0:
                         success = True # At least one device received it
+                    else:
+                        print(f"FCM FAILURE: All devices failed for {user.username}")
                 else:
                     print(f"FCM SUCCESS: Sent to {user.username} ({response.success_count} devices)")
                     success = True

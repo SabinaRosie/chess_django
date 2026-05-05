@@ -464,13 +464,16 @@ class GameConsumer(AsyncWebsocketConsumer):
                 self.room_group_name,
                 {
                     'type': 'game_move',
-                    'move': data.get('move'), # e.g., 'e2e4'
-                    'fen': data.get('fen'),   # Current board state
+                    'move': data.get('move'),
+                    'fen': data.get('fen'),
                     'sender_id': self.user_id
                 }
             )
             # Update DB state
             await self.update_game_state(data.get('fen'), data.get('move'))
+
+        elif action == 'ping':
+            await self.send(text_data=json.dumps({'type': 'pong'}))
 
         elif action == 'resign':
             opponent_id = await self.get_opponent_id()
