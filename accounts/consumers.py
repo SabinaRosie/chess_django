@@ -390,10 +390,13 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.game_id = self.scope['url_route']['kwargs']['game_id']
         self.room_group_name = f'game_{self.game_id}'
         self.user_id = self.scope['user'].id
+        
+        print(f"GAME DEBUG: Attempting connect. Game: {self.game_id}, User: {self.user_id}")
 
         # Verify player is part of the game
         is_player = await self.check_player()
         if not is_player:
+            print(f"GAME DEBUG: REJECTED. User {self.user_id} not in game {self.game_id}")
             await self.close()
             return
 
