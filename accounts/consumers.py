@@ -486,14 +486,32 @@ class GameConsumer(AsyncWebsocketConsumer):
             if not GameConsumer.game_sessions[self.game_id]:
                 del GameConsumer.game_sessions[self.game_id]
 
-        # Notify opponent of disconnection
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'player_disconnected',
-                'user_id': self.user_id
-            }
-        )
+        # Notify opponent of disconnection/quit
+        game_data = await self.get_game_state_data()
+        if game_data['status'] == 'active':
+            # Auto-resign the quitter
+            opponent_id = await self.get_opponent_id()
+            username = self.scope['user'].username
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_over',
+                    'reason': 'opponent_quit',
+                    'winner_id': opponent_id,
+                    'loser_id': self.user_id,
+                    'loser_username': username
+                }
+            )
+            color = await self.get_color()
+            await self.end_game('black_win' if color == 'white' else 'white_win')
+        else:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'player_disconnected',
+                    'user_id': self.user_id
+                }
+            )
         print(f"GAME DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left game {getattr(self, 'game_id', 'unknown')} (Code: {close_code})")
 
     async def receive(self, text_data):
@@ -504,6 +522,17 @@ class GameConsumer(AsyncWebsocketConsumer):
         action = data.get('action')
 
         if action == 'move':
+            # 🔹 Turn Validation
+            game_data = await self.get_game_state_data()
+            current_fen = game_data['fen']
+            # Simple FEN check: ' w ' means white to move, ' b ' means black to move
+            is_white_turn = ' w ' in current_fen
+            color = await self.get_color()
+            
+            if (is_white_turn and color != 'white') or (not is_white_turn and color != 'black'):
+                print(f"GAME DEBUG: REJECTED MOVE. Not {color}'s turn. FEN: {current_fen}")
+                return
+
             # Broadcast move to opponent
             await self.channel_layer.group_send(
                 self.room_group_name,
@@ -522,13 +551,15 @@ class GameConsumer(AsyncWebsocketConsumer):
 
         elif action == 'resign':
             opponent_id = await self.get_opponent_id()
+            username = self.scope['user'].username
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
                     'type': 'game_over',
                     'reason': 'resignation',
                     'winner_id': opponent_id,
-                    'loser_id': self.user_id
+                    'loser_id': self.user_id,
+                    'loser_username': username
                 }
             )
             color = await self.get_color()
@@ -539,6 +570,16 @@ class GameConsumer(AsyncWebsocketConsumer):
                 self.room_group_name,
                 {
                     'type': 'draw_offered_relay',
+                    'sender_id': self.user_id,
+                    'username': self.scope['user'].username
+                }
+            )
+
+        elif action == 'decline_draw':
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'draw_declined_relay',
                     'sender_id': self.user_id
                 }
             )
@@ -565,13 +606,21 @@ class GameConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({
             'type': 'game_over',
             'reason': event.get('reason'),
-            'winner_id': event.get('winner_id')
+            'winner_id': event.get('winner_id'),
+            'loser_username': event.get('loser_username')
         }))
 
     async def draw_offered_relay(self, event):
         if self.user_id != event['sender_id']:
             await self.send(text_data=json.dumps({
-                'type': 'draw_offered'
+                'type': 'draw_offered',
+                'username': event.get('username')
+            }))
+
+    async def draw_declined_relay(self, event):
+        if self.user_id != event['sender_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'draw_declined'
             }))
 
     async def player_disconnected(self, event):
