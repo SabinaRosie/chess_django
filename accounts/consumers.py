@@ -397,6 +397,8 @@ class ChatConsumer(AsyncWebsocketConsumer):
 class GameConsumer(AsyncWebsocketConsumer):
     # Track connected players per game: game_id -> {user_id: channel_name}
     game_sessions = {}
+    # Track who has ever joined the game during this server instance: game_id -> set of user_ids
+    joined_players_history = {}
 
     async def connect(self):
         if self.scope["user"].is_anonymous:
@@ -423,29 +425,40 @@ class GameConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
 
+        # Check if user was already in history (true reconnection)
+        is_reconnect = False
+        if self.game_id in GameConsumer.joined_players_history and self.user_id in GameConsumer.joined_players_history[self.game_id]:
+            is_reconnect = True
+        
+        # Update history
+        if self.game_id not in GameConsumer.joined_players_history:
+            GameConsumer.joined_players_history[self.game_id] = set()
+        GameConsumer.joined_players_history[self.game_id].add(self.user_id)
+
         # Register session
         if self.game_id not in GameConsumer.game_sessions:
             GameConsumer.game_sessions[self.game_id] = {}
         GameConsumer.game_sessions[self.game_id][self.user_id] = self.channel_name
 
         await self.accept()
-        print(f"GAME CONNECT: User {self.user_id} joined game {self.game_id}")
+        print(f"GAME CONNECT: User {self.user_id} joined game {self.game_id} (Reconnect: {is_reconnect})")
 
-        # 🔹 Send initial game state to the joining player
+        # ... send sync ...
         game_data = await self.get_game_state_data()
         await self.send(text_data=json.dumps({
             'type': 'game_sync',
             'data': game_data
         }))
 
-        # Notify opponent of reconnection if they were waiting
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {
-                'type': 'player_reconnected',
-                'user_id': self.user_id
-            }
-        )
+        # Notify opponent of reconnection ONLY if they were previously in the session
+        if is_reconnect:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'player_reconnected',
+                    'user_id': self.user_id
+                }
+            )
 
         # If both players are now connected, signal game start
         if len(GameConsumer.game_sessions[self.game_id]) == 2:
@@ -570,7 +583,7 @@ class GameConsumer(AsyncWebsocketConsumer):
     async def player_reconnected(self, event):
         if self.user_id != event['user_id']:
             await self.send(text_data=json.dumps({
-                'type': 'opponent_reconnected'
+                'type': 'player_reconnected'
             }))
 
     @database_sync_to_async
