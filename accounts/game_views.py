@@ -149,22 +149,8 @@ def respond_invitation(request):
             }
         )
 
-        # 2. IMMEDIATELY send FCM Push Notification to Sender (White)
-        print(f"FCM LOG: Attempting to send 'Challenge Accepted' to sender {invitation.sender.username} (ID: {invitation.sender.id})")
-        send_push_notification(
-            invitation.sender,
-            title="Challenge Accepted",
-            body=f"{request.user.username} has accepted your chess challenge! Tap to play now.",
-            data={
-                'type': 'game_invitation_accepted',
-                'game_id': str(game.id),
-                'opponent_id': str(request.user.id),
-                'opponent_name': str(request.user.username),
-                'opponent_photo': str(getattr(request.user, 'profile_photo_url', '')),
-                'color': 'white',
-            }
-        )
-        print(f"FCM LOG: Dispatched 'Challenge Accepted' to sender {invitation.sender.username}")
+        # 2. WebSocket signal is still needed for real-time sync if they are online
+        print(f"GAME LOG: Dispatched WebSocket 'invitation_accepted' to sender {invitation.sender.username}")
 
         # 3. Optional: Notify Receiver (Self) via FCM as well
         send_push_notification(
