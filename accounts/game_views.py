@@ -46,9 +46,18 @@ def send_invitation(request):
     # Cancel any existing pending invitations from this sender to this receiver
     GameInvitation.objects.filter(sender=request.user, receiver=receiver, status='pending').update(status='cancelled')
 
+    # 🔹 Create a ChessGame immediately so the sender can wait on the board
+    game = ChessGame.objects.create(
+        white_player=request.user,
+        black_player=receiver,
+        status='active'
+    )
+    print(f"GAME DEBUG: Created game {game.id} for invitation from {request.user.username} to {receiver.username}")
+
     invitation = GameInvitation.objects.create(
         sender=request.user,
         receiver=receiver,
+        game=game,
         status='pending'
     )
 
@@ -60,6 +69,7 @@ def send_invitation(request):
             'type': 'game_invitation',
             'data': {
                 'invitation_id': invitation.id,
+                'game_id': str(game.id),
                 'sender_id': request.user.id,
                 'sender_username': request.user.username,
                 'created_at': invitation.created_at.isoformat(),
@@ -75,6 +85,7 @@ def send_invitation(request):
         data={
             'type': 'game_invitation',
             'invitation_id': str(invitation.id),
+            'game_id': str(game.id),
             'sender_id': str(request.user.id),
             'sender_name': request.user.username,
         }
@@ -82,7 +93,8 @@ def send_invitation(request):
 
     return Response({
         "status": "success",
-        "invitation_id": invitation.id
+        "invitation_id": invitation.id,
+        "game_id": str(game.id)
     })
 
 @api_view(['POST'])
@@ -104,12 +116,17 @@ def respond_invitation(request):
         invitation.status = 'accepted'
         invitation.save()
 
-        # Determine colors (sender white, receiver black as per requirements)
-        game = ChessGame.objects.create(
-            white_player=invitation.sender,
-            black_player=invitation.receiver,
-            status='active'
-        )
+        # 🔹 Use the existing game if available, otherwise create (fallback)
+        if invitation.game:
+            game = invitation.game
+            game.status = 'active' # Ensure it's active
+            game.save()
+        else:
+            game = ChessGame.objects.create(
+                white_player=invitation.sender,
+                black_player=invitation.receiver,
+                status='active'
+            )
 
         # 1. Notify Sender via WebSocket to start the game
         channel_layer = get_channel_layer()

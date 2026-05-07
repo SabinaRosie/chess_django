@@ -144,6 +144,7 @@ class GameInvitation(models.Model):
     ]
     sender = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invitations_sent')
     receiver = models.ForeignKey(User, on_delete=models.CASCADE, related_name='invitations_received')
+    game = models.ForeignKey('ChessGame', on_delete=models.SET_NULL, null=True, blank=True, related_name='invitation')
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
     created_at = models.DateTimeField(auto_now_add=True)
 
