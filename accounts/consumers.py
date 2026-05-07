@@ -460,8 +460,9 @@ class GameConsumer(AsyncWebsocketConsumer):
                 }
             )
 
-        # If both players are now connected, signal game start
+        # If both players are now connected, signal game start to the GROUP
         if len(GameConsumer.game_sessions[self.game_id]) == 2:
+            print(f"GAME START: Both players connected to {self.game_id}. Sending game_start signal.")
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -471,6 +472,8 @@ class GameConsumer(AsyncWebsocketConsumer):
                     }
                 }
             )
+        else:
+            print(f"GAME CONNECT: Waiting for opponent. Current players: {len(GameConsumer.game_sessions[self.game_id])}")
 
     async def disconnect(self, close_code):
         # Leave room group
