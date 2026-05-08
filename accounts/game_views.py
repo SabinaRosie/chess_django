@@ -209,6 +209,19 @@ def cancel_invitation(request):
         invitation = GameInvitation.objects.get(id=invitation_id, sender=request.user, status='pending')
         invitation.status = 'cancelled'
         invitation.save()
+        
+        # Notify Receiver via WebSocket
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f'user_{invitation.receiver.id}'.replace(' ', '_'),
+            {
+                'type': 'invitation_cancelled',
+                'data': {
+                    'invitation_id': invitation.id,
+                }
+            }
+        )
+        
         return Response({"status": "cancelled"})
     except GameInvitation.DoesNotExist:
         return Response({"error": "Invitation not found or not pending"}, status=404)

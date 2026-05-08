@@ -159,7 +159,19 @@ class NotificationConsumer(AsyncWebsocketConsumer):
 
     async def invitation_accepted(self, event):
         await self.send(text_data=json.dumps({
-            'type': 'invitation:accepted',
+            'type': 'invitation_accepted',
+            'data': event['data']
+        }))
+
+    async def invitation_declined(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'invitation_declined',
+            'data': event['data']
+        }))
+    
+    async def invitation_cancelled(self, event):
+        await self.send(text_data=json.dumps({
+            'type': 'invitation_cancelled',
             'data': event['data']
         }))
 
@@ -637,6 +649,13 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({
                 'type': 'player_reconnected'
             }))
+
+    async def game_start(self, event):
+        """Handler for game_start group message."""
+        await self.send(text_data=json.dumps({
+            'type': 'game_start',
+            'data': event['data']
+        }))
 
     @database_sync_to_async
     def check_player(self):
