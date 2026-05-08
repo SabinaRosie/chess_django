@@ -261,3 +261,17 @@ def list_sent_invitations(request):
             'created_at': inv.created_at,
         })
     return Response(data)
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def get_invitation_status(request, invitation_id):
+    """Check the current status of an invitation (for polling fallback)."""
+    try:
+        invitation = GameInvitation.objects.get(id=invitation_id)
+        return Response({
+            "status": invitation.status,
+            "game_id": str(invitation.game.id) if invitation.game else None,
+            "opponent_id": invitation.receiver.id if request.user == invitation.sender else invitation.sender.id,
+            "opponent_username": invitation.receiver.username if request.user == invitation.sender else invitation.sender.username
+        })
+    except GameInvitation.DoesNotExist:
+        return Response({"error": "Invitation not found"}, status=404)

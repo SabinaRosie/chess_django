@@ -47,4 +47,5 @@ urlpatterns = [
     path('game/cancel', game_views.cancel_invitation),
     path('game/invitations/pending', game_views.list_pending_invitations),
     path('game/invitations/sent', game_views.list_sent_invitations),
+    path('game/invitation/<int:invitation_id>/status', game_views.get_invitation_status),
 ]
