@@ -27,7 +27,7 @@ class CallRoom(models.Model):
         ('rejected', 'Rejected'),
     ]
 
-    room_id = models.UUIDField(default=uuid.uuid4, unique=True, editable=False)
+    room_id = models.UUIDField(default=uuid.uuid4, unique=True)
     caller = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_made')
     callee = models.ForeignKey(User, on_delete=models.CASCADE, related_name='calls_received')
     call_type = models.CharField(max_length=5, choices=CALL_TYPES, default='audio')

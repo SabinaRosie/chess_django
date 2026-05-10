@@ -608,6 +608,24 @@ class GameConsumer(AsyncWebsocketConsumer):
                 }
             )
             await self.end_game('draw')
+        
+        elif action == 'game_over':
+            # Handle king capture signal from client
+            reason = data.get('reason', 'king_captured')
+            opponent_id = await self.get_opponent_id()
+            color = await self.get_color()
+            
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'game_over',
+                    'reason': reason,
+                    'winner_id': self.user_id,
+                    'loser_id': opponent_id,
+                    'loser_username': await self.get_opponent_username()
+                }
+            )
+            await self.end_game('white_win' if color == 'white' else 'black_win')
 
     async def game_move(self, event):
         if self.user_id != event['sender_id']:
@@ -677,6 +695,13 @@ class GameConsumer(AsyncWebsocketConsumer):
         from .models import ChessGame
         game = ChessGame.objects.get(id=self.game_id)
         return 'white' if game.white_player_id == self.user_id else 'black'
+
+    @database_sync_to_async
+    def get_opponent_username(self):
+        from .models import ChessGame
+        game = ChessGame.objects.get(id=self.game_id)
+        opponent = game.black_player if game.white_player_id == self.user_id else game.white_player
+        return opponent.username
 
     @database_sync_to_async
     def update_game_state(self, fen, move):
