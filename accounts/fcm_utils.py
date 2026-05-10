@@ -37,7 +37,7 @@ initialize_firebase()
 
 import threading
 
-def send_push_notification(user, title, body, data=None, async_send=True):
+def send_push_notification(user, title, body, data=None, async_send=True, channel_id='normal_channel'):
     """Send a push notification to all devices registered for a user."""
     
     def _send():
@@ -65,10 +65,10 @@ def send_push_notification(user, title, body, data=None, async_send=True):
         message_payload = messaging.MulticastMessage(
             notification=messaging.Notification(title=title, body=body),
             android=messaging.AndroidConfig(
-                priority='high',
+                priority='high' if channel_id == 'high_importance_channel' else 'normal',
                 notification=messaging.AndroidNotification(
-                    channel_id='high_importance_channel',
-                    priority='max', 
+                    channel_id=channel_id,
+                    priority='max' if channel_id == 'high_importance_channel' else 'default', 
                     default_vibrate_timings=True,
                     default_sound=True,
                 ),

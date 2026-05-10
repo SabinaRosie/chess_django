@@ -53,17 +53,7 @@ def send_invitation(request):
         status='active'
     )
     
-    # 🔹 Create a CallRoom for this game (Voice Signaling)
-    from .models import CallRoom
-    CallRoom.objects.create(
-        room_id=game.id,
-        caller=request.user,
-        callee=receiver,
-        call_type='audio',
-        status='pending'
-    )
-    
-    print(f"GAME DEBUG: Created game {game.id} and CallRoom for invitation from {request.user.username} to {receiver.username}")
+    print(f"GAME DEBUG: Created game {game.id} for invitation from {request.user.username} to {receiver.username}")
 
     invitation = GameInvitation.objects.create(
         sender=request.user,
