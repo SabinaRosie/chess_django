@@ -175,3 +175,12 @@ class ChessGame(models.Model):
     def __str__(self):
         return f"Game {self.id}: {self.white_player.username} vs {self.black_player.username}"
 
+
+class ChessTip(models.Model):
+    text = models.TextField()
+    category = models.CharField(max_length=50, blank=True, null=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"Tip {self.id}: {self.text[:30]}"
+

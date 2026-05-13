@@ -4,7 +4,7 @@ from .views import (
     signup, login, forgot_password, verify_otp, reset_password,
     user_profile, logout_view, get_users, test_email,
     create_call, check_incoming, answer_call, send_signal, get_signals, end_call,
-    get_turn_credentials, register_fcm_token,
+    get_turn_credentials, register_fcm_token, get_random_tip
 )
 from . import chat_views
 from . import game_views
@@ -20,6 +20,7 @@ urlpatterns = [
     path('users', get_users),
     path('token/refresh', TokenRefreshView.as_view()),
     path('test-email', test_email),
+    path('chess-tip', get_random_tip),
 
     # WebRTC Call Signaling
     path('call/create', create_call),
