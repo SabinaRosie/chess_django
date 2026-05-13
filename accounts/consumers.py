@@ -1,4 +1,5 @@
 import json
+import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
@@ -15,15 +16,21 @@ class CallConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
         await self.accept()
-
-        # 🔹 Send all buffered signals to the new joiner
-        await self.send_buffered_signals()
+        
+        # 🔹 Track the last signal ID sent to avoid duplicates
+        self.last_sent_signal_id = 0
+        
+        # 🔹 Start background polling for cross-worker signaling
+        self.polling_task = asyncio.create_task(self.poll_new_signals())
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
+        # 🔹 Stop background polling
+        if hasattr(self, 'polling_task'):
+            self.polling_task.cancel()
 
     # 🔹 Class-level buffer for high-speed signaling (Supports Call IDs AND Game IDs)
     # Format: { room_id: [ {type, data, sender_id, timestamp}, ... ] }
@@ -93,19 +100,29 @@ class CallConsumer(AsyncWebsocketConsumer):
             print(f"Error buffering signal in DB: {e}")
 
     async def send_buffered_signals(self):
-        """Sends all stored signals from the DB to the joining user."""
-        signals = await self.get_buffered_signals_from_db()
+        """Sends new stored signals from the DB to the client."""
+        signals = await self.get_new_signals_from_db()
         for signal in signals:
             if signal['sender_id'] != self.scope['user'].id:
                 await self.send(text_data=json.dumps({
                     'type': signal['type'],
                     'data': signal['data']
                 }))
+            # Update last sent ID
+            self.last_sent_signal_id = max(self.last_sent_signal_id, signal['id'])
+
+    async def poll_new_signals(self):
+        """Periodically checks the DB for new signals (Fallback for cross-worker communication)."""
+        try:
+            while True:
+                await self.send_buffered_signals()
+                await asyncio.sleep(1.5)  # Fast enough for signaling, slow enough for DB
+        except asyncio.CancelledError:
+            pass
 
     @database_sync_to_async
-    def get_buffered_signals_from_db(self):
+    def get_new_signals_from_db(self):
         try:
-            # Cleanup old signals for this room (older than 10 mins) to keep things fast
             from django.utils import timezone
             from datetime import timedelta
             
@@ -113,18 +130,21 @@ class CallConsumer(AsyncWebsocketConsumer):
             if not room:
                 return []
                 
+            # Fetch signals newer than what we've sent
             signals = CallSignal.objects.filter(
                 room=room, 
-                created_at__gt=timezone.now() - timedelta(minutes=10)
-            ).order_by('created_at')
+                id__gt=self.last_sent_signal_id,
+                created_at__gt=timezone.now() - timedelta(minutes=5)
+            ).order_by('id')
             
             return [{
+                'id': s.id,
                 'type': s.signal_type,
                 'data': s.data,
                 'sender_id': s.sender_id
             } for s in signals]
         except Exception as e:
-            print(f"Error fetching signals from DB: {e}")
+            print(f"Error fetching new signals from DB: {e}")
             return []
 
 class NotificationConsumer(AsyncWebsocketConsumer):
