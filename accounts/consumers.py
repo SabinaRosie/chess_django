@@ -25,6 +25,10 @@ class CallConsumer(AsyncWebsocketConsumer):
             self.channel_name
         )
 
+    # 🔹 Class-level buffer for high-speed signaling (Supports Call IDs AND Game IDs)
+    # Format: { room_id: [ {type, data, sender_id, timestamp}, ... ] }
+    signal_buffer = {}
+
     async def receive(self, text_data):
         data = json.loads(text_data)
         signal_type = data.get('type')
@@ -34,7 +38,7 @@ class CallConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'type': 'pong'}))
             return
 
-        # 🔹 Buffer all important signals
+        # 🔹 Buffer important signals (offer, answer, candidate)
         if signal_type in ('offer', 'answer', 'candidate'):
             await self.buffer_signal(signal_type, payload)
 
@@ -55,50 +59,40 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'data': event['data']
             }))
 
-    @database_sync_to_async
-    def buffer_signal(self, signal_type, data):
-        try:
-            room = CallRoom.objects.get(room_id=self.room_id)
-            # Update room fields for quick access
-            if signal_type == 'offer':
-                room.offer_sdp = data
-                room.save()
-            elif signal_type == 'answer':
-                room.answer_sdp = data
-                room.save()
-            
-            # Save to CallSignal for full history (especially candidates)
-            CallSignal.objects.create(
-                room=room,
-                sender=self.scope['user'],
-                signal_type=signal_type,
-                data=data
-            )
-        except Exception as e:
-            print(f"Error buffering signal: {e}")
+    async def buffer_signal(self, signal_type, data):
+        """Buffers signals in memory for any room ID."""
+        if self.room_id not in CallConsumer.signal_buffer:
+            CallConsumer.signal_buffer[self.room_id] = []
+        
+        # Add new signal
+        CallConsumer.signal_buffer[self.room_id].append({
+            'type': signal_type,
+            'data': data,
+            'sender_id': self.scope['user'].id,
+            'timestamp': timezone.now()
+        })
+        
+        # Keep only the last 50 signals per room to prevent memory leaks
+        if len(CallConsumer.signal_buffer[self.room_id]) > 50:
+            CallConsumer.signal_buffer[self.room_id].pop(0)
 
     async def send_buffered_signals(self):
-        signals = await self.get_buffered_signals()
-        for signal in signals:
-            # Don't send back to the user who originally sent it
-            if signal['sender_id'] != self.scope['user'].id:
-                await self.send(text_data=json.dumps({
-                    'type': signal['type'],
-                    'data': signal['data']
-                }))
+        """Sends all stored signals for this room to the joining user."""
+        if self.room_id in CallConsumer.signal_buffer:
+            # Clean up expired signals (older than 5 minutes)
+            now = timezone.now()
+            CallConsumer.signal_buffer[self.room_id] = [
+                s for s in CallConsumer.signal_buffer[self.room_id]
+                if (now - s['timestamp']).total_seconds() < 300
+            ]
 
-    @database_sync_to_async
-    def get_buffered_signals(self):
-        try:
-            room = CallRoom.objects.get(room_id=self.room_id)
-            signals = CallSignal.objects.filter(room=room).order_by('created_at')
-            return [{
-                'type': s.signal_type,
-                'data': s.data,
-                'sender_id': s.sender_id
-            } for s in signals]
-        except Exception:
-            return []
+            for signal in CallConsumer.signal_buffer[self.room_id]:
+                # Don't send back to the user who originally sent it
+                if signal['sender_id'] != self.scope['user'].id:
+                    await self.send(text_data=json.dumps({
+                        'type': signal['type'],
+                        'data': signal['data']
+                    }))
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     # Global tracking of online users: set of user_ids
