@@ -47,6 +47,7 @@ class CallConsumer(AsyncWebsocketConsumer):
 
         # 🔹 Buffer important signals (offer, answer, candidate)
         if signal_type in ('offer', 'answer', 'candidate'):
+            print(f"DEBUG: Received {signal_type} from {self.scope['user']} for room {self.room_id}")
             await self.buffer_signal(signal_type, payload)
 
         await self.channel_layer.group_send(
@@ -96,6 +97,7 @@ class CallConsumer(AsyncWebsocketConsumer):
                 signal_type=signal_type,
                 data=data
             )
+            print(f"DEBUG: Buffered {signal_type} in DB for room {self.room_id}")
         except Exception as e:
             print(f"Error buffering signal in DB: {e}")
 
@@ -108,6 +110,7 @@ class CallConsumer(AsyncWebsocketConsumer):
                     'type': signal['type'],
                     'data': signal['data']
                 }))
+                print(f"DEBUG: Sent buffered {signal['type']} to {self.scope['user']} (Room: {self.room_id})")
             # Update last sent ID
             self.last_sent_signal_id = max(self.last_sent_signal_id, signal['id'])
 
