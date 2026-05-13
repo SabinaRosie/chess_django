@@ -59,40 +59,73 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'data': event['data']
             }))
 
-    async def buffer_signal(self, signal_type, data):
-        """Buffers signals in memory for any room ID."""
-        if self.room_id not in CallConsumer.signal_buffer:
-            CallConsumer.signal_buffer[self.room_id] = []
-        
-        # Add new signal
-        CallConsumer.signal_buffer[self.room_id].append({
-            'type': signal_type,
-            'data': data,
-            'sender_id': self.scope['user'].id,
-            'timestamp': timezone.now()
-        })
-        
-        # Keep only the last 50 signals per room to prevent memory leaks
-        if len(CallConsumer.signal_buffer[self.room_id]) > 50:
-            CallConsumer.signal_buffer[self.room_id].pop(0)
+    @database_sync_to_async
+    def buffer_signal(self, signal_type, data):
+        """Buffers signals in the database to ensure they are shared across all server workers."""
+        try:
+            # 🔹 Get or Create the room (Supports both Game IDs and Call IDs)
+            # We use the current user as caller/callee placeholders if creating a new one
+            room, created = CallRoom.objects.get_or_create(
+                room_id=self.room_id,
+                defaults={
+                    'caller': self.scope['user'],
+                    'callee': self.scope['user'],
+                    'status': 'active'
+                }
+            )
+            
+            # Update room fields for quick access (SDP buffering)
+            if signal_type == 'offer':
+                room.offer_sdp = data
+                room.save()
+            elif signal_type == 'answer':
+                room.answer_sdp = data
+                room.save()
+            
+            # Save the signal for full history (especially candidates)
+            CallSignal.objects.create(
+                room=room,
+                sender=self.scope['user'],
+                signal_type=signal_type,
+                data=data
+            )
+        except Exception as e:
+            print(f"Error buffering signal in DB: {e}")
 
     async def send_buffered_signals(self):
-        """Sends all stored signals for this room to the joining user."""
-        if self.room_id in CallConsumer.signal_buffer:
-            # Clean up expired signals (older than 5 minutes)
-            now = timezone.now()
-            CallConsumer.signal_buffer[self.room_id] = [
-                s for s in CallConsumer.signal_buffer[self.room_id]
-                if (now - s['timestamp']).total_seconds() < 300
-            ]
+        """Sends all stored signals from the DB to the joining user."""
+        signals = await self.get_buffered_signals_from_db()
+        for signal in signals:
+            if signal['sender_id'] != self.scope['user'].id:
+                await self.send(text_data=json.dumps({
+                    'type': signal['type'],
+                    'data': signal['data']
+                }))
 
-            for signal in CallConsumer.signal_buffer[self.room_id]:
-                # Don't send back to the user who originally sent it
-                if signal['sender_id'] != self.scope['user'].id:
-                    await self.send(text_data=json.dumps({
-                        'type': signal['type'],
-                        'data': signal['data']
-                    }))
+    @database_sync_to_async
+    def get_buffered_signals_from_db(self):
+        try:
+            # Cleanup old signals for this room (older than 10 mins) to keep things fast
+            from django.utils import timezone
+            from datetime import timedelta
+            
+            room = CallRoom.objects.filter(room_id=self.room_id).first()
+            if not room:
+                return []
+                
+            signals = CallSignal.objects.filter(
+                room=room, 
+                created_at__gt=timezone.now() - timedelta(minutes=10)
+            ).order_by('created_at')
+            
+            return [{
+                'type': s.signal_type,
+                'data': s.data,
+                'sender_id': s.sender_id
+            } for s in signals]
+        except Exception as e:
+            print(f"Error fetching signals from DB: {e}")
+            return []
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     # Global tracking of online users: set of user_ids
