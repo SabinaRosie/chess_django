@@ -25,9 +25,9 @@ def initiate_payment(request):
     except (ValueError, TypeError):
         amount = str(amount_raw)
 
-    import time
-    # Using a simpler ID format (timestamp + user ID)
-    transaction_uuid = f"{int(time.time())}{request.user.id}"
+    import random
+    # Using an ultra-simple numeric ID to rule out formatting issues
+    transaction_uuid = f"{random.randint(100000, 999999)}"
 
     # Create a local Transaction record (PENDING)
     transaction = Transaction.objects.create(
