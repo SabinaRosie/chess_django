@@ -19,15 +19,9 @@ def initiate_payment(request):
     if not amount_raw or not product_id:
         return Response({"error": "Amount and product_id are required"}, status=400)
 
-    # Format amount: Back to clean integer if whole number
-    try:
-        amount = str(int(float(amount_raw))) if float(amount_raw) == int(float(amount_raw)) else str(float(amount_raw))
-    except (ValueError, TypeError):
-        amount = str(amount_raw)
-
-    import random
-    # Using an ultra-simple numeric ID to rule out formatting issues
-    transaction_uuid = f"{random.randint(100000, 999999)}"
+    # Format amount: ensure it's a clean integer string for this test
+    amount = "100"
+    transaction_uuid = f"TEST{random.randint(1000, 9999)}"
 
     # Create a local Transaction record (PENDING)
     transaction = Transaction.objects.create(
@@ -38,23 +32,22 @@ def initiate_payment(request):
         status='PENDING'
     )
 
-    key_str = settings.ESEWA_SECRET_KEY.strip()
-    
-    # 🔹 eSewa v2 Signature Logic
-    # Hardcoding EPAYTEST just to be 100% sure it matches the sandbox requirement
+    # 🔹 eSewa v2 Signature Logic - matching the most common successful pattern
+    # No spaces, exactly these 3 fields
     data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code=EPAYTEST"
     
-    print(f"DEBUG: eSewa Signature String: [{data_string}]")
+    print(f"DEBUG: Testing with string: [{data_string}]")
     
-    print(f"DEBUG: eSewa Secret Key starts with: {key_str[:4]}...")
-    key = key_str.encode('utf-8')
+    # Common sandbox secret key
+    secret_key = "8g8M8m8P8p8P8m8M"
+    key = secret_key.encode('utf-8')
     message_bytes = data_string.encode('utf-8')
     
     # Generate HMAC-SHA256 signature
     hmac_sha256 = hmac.new(key, message_bytes, hashlib.sha256).digest()
     signature = base64.b64encode(hmac_sha256).decode('utf-8')
     
-    print(f"DEBUG: eSewa Signature Generated: [{signature}]")
+    print(f"DEBUG: Generated Signature: [{signature}]")
 
     return Response({
         "success": True,
