@@ -184,3 +184,26 @@ class ChessTip(models.Model):
     def __str__(self):
         return f"Tip {self.id}: {self.text[:30]}"
 
+class UserProfile(models.Model):
+    user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
+    coins = models.PositiveIntegerField(default=100) # Starting coins for new users
+
+    def __str__(self):
+        return f"{self.user.username} - {self.coins} coins"
+
+# Signals to create/save UserProfile automatically
+from django.db.models.signals import post_save
+from django.dispatch import receiver
+
+@receiver(post_save, sender=User)
+def create_user_profile(sender, instance, created, **kwargs):
+    if created:
+        UserProfile.objects.create(user=instance)
+
+@receiver(post_save, sender=User)
+def save_user_profile(sender, instance, **kwargs):
+    if hasattr(instance, 'profile'):
+        instance.profile.save()
+    else:
+        UserProfile.objects.create(user=instance)
+

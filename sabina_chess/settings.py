@@ -68,6 +68,7 @@ INSTALLED_APPS = [
     'corsheaders',
     'channels',
     'accounts',
+    'payments',
     'drf_yasg',
 ]
 
@@ -214,3 +215,8 @@ EMAIL_TIMEOUT = 10  # Timeout in seconds to prevent hanging on blocked ports
 
 # Brevo (Sendinblue) API for sending emails via HTTP (HF Spaces blocks SMTP)
 BREVO_API_KEY = os.environ.get('BREVO_API_KEY', '')
+
+# eSewa Configuration (Sandbox/Testing)
+ESEWA_MERCHANT_ID = os.environ.get('ESEWA_MERCHANT_ID', 'EPAYTEST')
+ESEWA_SECRET_KEY = os.environ.get('ESEWA_SECRET_KEY', '8g8M8m8P8p8P8m8M')
+ESEWA_VERIFY_URL = "https://rc-epay.esewa.com.np/api/epay/main/v2/form/verification"

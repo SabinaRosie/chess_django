@@ -284,9 +284,12 @@ def reset_password(request):
 @permission_classes([IsAuthenticated])
 def user_profile(request):
     user = request.user
+    # Ensure profile exists (just in case)
+    coins = user.profile.coins if hasattr(user, 'profile') else 0
     return Response({
         "username": user.username,
         "email": user.email,
+        "coins": coins,
     })
 
 @api_view(['GET'])
