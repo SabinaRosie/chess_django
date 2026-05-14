@@ -131,29 +131,28 @@ def signup(request):
 @api_view(['POST'])
 def login(request):
     try:
-        username_or_email = request.data.get('username')
+        # Try to get email first, then fallback to username for compatibility
+        email_or_username = request.data.get('email') or request.data.get('username')
         password = request.data.get('password')
 
-        if not username_or_email or not password:
-            return Response({"error": "Username/email and password required"}, status=400)
+        if not email_or_username or not password:
+            return Response({"error": "Email and password required"}, status=400)
 
-        # 1. Try traditional authentication
-        user = authenticate(username=username_or_email, password=password)
-
-        # 2. If it fails, check if input was an email
-        if user is None:
-            try:
-                user_obj = User.objects.get(email=username_or_email)
-                user = authenticate(username=user_obj.username, password=password)
-            except (User.DoesNotExist, User.MultipleObjectsReturned):
-                pass
+        # 1. Try to find user by email first (Professional approach)
+        user = None
+        try:
+            user_obj = User.objects.get(email=email_or_username)
+            user = authenticate(username=user_obj.username, password=password)
+        except (User.DoesNotExist, User.MultipleObjectsReturned):
+            # 2. Fallback to traditional username authentication
+            user = authenticate(username=email_or_username, password=password)
 
         if user is None:
             # Check if user exists but is inactive
             try:
-                # Try finding by username OR email
+                # Try finding by email OR username
                 from django.db.models import Q
-                temp_user = User.objects.filter(Q(username=username_or_email) | Q(email=username_or_email)).first()
+                temp_user = User.objects.filter(Q(username=email_or_username) | Q(email=email_or_username)).first()
                 if temp_user and not temp_user.is_active:
                     return Response({"error": "Account not verified. Please check your email for the OTP."}, status=403)
             except Exception:
