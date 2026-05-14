@@ -24,17 +24,26 @@ from drf_yasg import openapi
 def home(request):
     return JsonResponse({"message": "Sabina Chess Backend is running!"})
 
+from accounts.views import signup, login, forgot_password, verify_otp, reset_password
+
+# Filter only the authentication endpoints for Swagger
+auth_patterns = [
+    path('api/signup', signup),
+    path('api/login', login),
+    path('api/forgot-password', forgot_password),
+    path('api/verify-otp', verify_otp),
+    path('api/reset-password', reset_password),
+]
+
 schema_view = get_schema_view(
     openapi.Info(
-        title="Sabina Chess API",
+        title="Sabina Chess Authentication API",
         default_version='v1',
-        description="API documentation for Sabina Chess Project",
-        terms_of_service="https://www.google.com/policies/terms/",
-        contact=openapi.Contact(email="contact@sabinachess.local"),
-        license=openapi.License(name="BSD License"),
+        description="Documentation for Authentication flow (Signup, Login, OTP, etc.)",
     ),
     public=True,
     permission_classes=(permissions.AllowAny,),
+    patterns=auth_patterns,
 )
 
 urlpatterns = [
