@@ -37,13 +37,14 @@ def initiate_payment(request):
         status='PENDING'
     )
 
+    key_str = settings.ESEWA_SECRET_KEY.strip()
+    merchant_id = settings.ESEWA_MERCHANT_ID.strip()
+    
     # 🔹 eSewa v2 Signature Logic
-    # Format: total_amount=100,transaction_uuid=uuid,product_code=EPAYTEST
-    data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code={settings.ESEWA_MERCHANT_ID}"
+    data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code={merchant_id}"
     
     print(f"DEBUG: eSewa Signature String: [{data_string}]")
     
-    key_str = settings.ESEWA_SECRET_KEY
     print(f"DEBUG: eSewa Secret Key starts with: {key_str[:4]}...")
     key = key_str.encode('utf-8')
     message_bytes = data_string.encode('utf-8')
@@ -60,7 +61,7 @@ def initiate_payment(request):
             "amount": amount,
             "product_id": product_id,
             "transaction_uuid": transaction_uuid,
-            "merchant_id": settings.ESEWA_MERCHANT_ID,
+            "merchant_id": merchant_id,
             "signature": signature,
         }
     })
