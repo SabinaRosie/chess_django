@@ -17,12 +17,33 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import path, include
 from django.http import JsonResponse
+from rest_framework import permissions
+from drf_yasg.views import get_schema_view
+from drf_yasg import openapi
 
 def home(request):
     return JsonResponse({"message": "Sabina Chess Backend is running!"})
+
+schema_view = get_schema_view(
+    openapi.Info(
+        title="Sabina Chess API",
+        default_version='v1',
+        description="API documentation for Sabina Chess Project",
+        terms_of_service="https://www.google.com/policies/terms/",
+        contact=openapi.Contact(email="contact@sabinachess.local"),
+        license=openapi.License(name="BSD License"),
+    ),
+    public=True,
+    permission_classes=(permissions.AllowAny,),
+)
 
 urlpatterns = [
     path('', home, name='home'),
     path('admin/', admin.site.urls),
     path('api/', include('accounts.urls')),
+    
+    # Swagger Documentation
+    path('api/docs/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
+    path('api/redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    path('api/schema/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
 ]

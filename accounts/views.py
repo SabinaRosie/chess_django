@@ -13,6 +13,8 @@ from django.conf import settings
 from django.utils import timezone
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
+from drf_yasg.utils import swagger_auto_schema
+from .serializers import LoginSerializer, SignupSerializer, OTPVerifySerializer, ResetPasswordSerializer, ForgotPasswordSerializer
 
 
 def _send_email_brevo(to_email, subject, body):
@@ -85,6 +87,7 @@ def _send_otp_email(user):
             print(f"WARNING: SMTP email failed: {error_msg}")
             return False, error_msg
 
+@swagger_auto_schema(method='post', request_body=SignupSerializer)
 @api_view(['POST'])
 def signup(request):
     try:
@@ -124,6 +127,7 @@ def signup(request):
         traceback.print_exc()
         return Response({"error": f"Signup failed: {str(e)}"}, status=500)
 
+@swagger_auto_schema(method='post', request_body=LoginSerializer)
 @api_view(['POST'])
 def login(request):
     try:
@@ -168,6 +172,7 @@ def login(request):
         print(f"DEBUG: login error: {str(e)}")
         return Response({"error": f"Login failed: {str(e)}"}, status=500)
 
+@swagger_auto_schema(method='post', request_body=ForgotPasswordSerializer)
 @api_view(['POST'])
 def forgot_password(request):
     try:
@@ -197,6 +202,7 @@ def forgot_password(request):
         traceback.print_exc()
         return Response({"error": f"Failed to send OTP: {str(e)}"}, status=500)
 
+@swagger_auto_schema(method='post', request_body=OTPVerifySerializer)
 @api_view(['POST'])
 def verify_otp(request):
     try:
@@ -242,6 +248,7 @@ def verify_otp(request):
         print(f"DEBUG: verify_otp error: {str(e)}")
         return Response({"error": f"Verification error: {str(e)}"}, status=500)
 
+@swagger_auto_schema(method='post', request_body=ResetPasswordSerializer)
 @api_view(['POST'])
 def reset_password(request):
     try:

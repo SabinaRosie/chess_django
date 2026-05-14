@@ -11,3 +11,4 @@ requests
 channels
 daphne
 firebase-admin
+drf-yasg
