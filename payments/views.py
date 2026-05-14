@@ -14,11 +14,16 @@ def initiate_payment(request):
     """
     Creates a transaction and returns the signature needed for eSewa v2.
     """
-    amount = request.data.get('amount')
-    product_id = request.data.get('product_id') # e.g. "coins_100"
-
-    if not amount or not product_id:
+    product_id = request.data.get('product_id')
+    amount_raw = request.data.get('amount')
+    if not amount_raw or not product_id:
         return Response({"error": "Amount and product_id are required"}, status=400)
+
+    # Format amount: if 100.0, make it 100. If 100.50, keep 100.50
+    try:
+        amount = str(int(float(amount_raw))) if float(amount_raw) == int(float(amount_raw)) else str(float(amount_raw))
+    except (ValueError, TypeError):
+        amount = str(amount_raw)
 
     # Generate a unique transaction UUID for this specific payment attempt
     transaction_uuid = f"{uuid.uuid4()}"
