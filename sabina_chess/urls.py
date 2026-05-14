@@ -24,7 +24,7 @@ from drf_yasg import openapi
 def home(request):
     return JsonResponse({"message": "Sabina Chess Backend is running!"})
 
-from accounts.views import signup, login, forgot_password, verify_otp, reset_password
+from accounts.views import signup, login, forgot_password, verify_otp, reset_password, user_profile, get_users
 
 # Filter only the authentication endpoints for Swagger
 auth_patterns = [
@@ -33,6 +33,8 @@ auth_patterns = [
     path('api/forgot-password', forgot_password),
     path('api/verify-otp', verify_otp),
     path('api/reset-password', reset_password),
+    path('api/profile', user_profile),
+    path('api/users', get_users),
 ]
 
 schema_view = get_schema_view(

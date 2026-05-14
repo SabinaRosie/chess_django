@@ -1,3 +1,4 @@
+# pyrefly: ignore [missing-import]
 import pytest
 from django.contrib.auth.models import User
 from django.utils import timezone
