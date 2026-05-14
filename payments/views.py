@@ -19,14 +19,14 @@ def initiate_payment(request):
     if not amount_raw or not product_id:
         return Response({"error": "Amount and product_id are required"}, status=400)
 
-    # Format amount: Force .0 for eSewa v2 (e.g. 100 -> 100.0)
+    # Format amount: Back to clean integer if whole number
     try:
-        amount = "{:.1f}".format(float(amount_raw))
+        amount = str(int(float(amount_raw))) if float(amount_raw) == int(float(amount_raw)) else str(float(amount_raw))
     except (ValueError, TypeError):
         amount = str(amount_raw)
 
     import time
-    # Using a simpler ID format (timestamp + user ID) to avoid dash issues
+    # Using a simpler ID format (timestamp + user ID)
     transaction_uuid = f"{int(time.time())}{request.user.id}"
 
     # Create a local Transaction record (PENDING)
@@ -39,10 +39,10 @@ def initiate_payment(request):
     )
 
     key_str = settings.ESEWA_SECRET_KEY.strip()
-    merchant_id = settings.ESEWA_MERCHANT_ID.strip()
     
     # 🔹 eSewa v2 Signature Logic
-    data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code={merchant_id}"
+    # Hardcoding EPAYTEST just to be 100% sure it matches the sandbox requirement
+    data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code=EPAYTEST"
     
     print(f"DEBUG: eSewa Signature String: [{data_string}]")
     
@@ -62,7 +62,7 @@ def initiate_payment(request):
             "amount": amount,
             "product_id": product_id,
             "transaction_uuid": transaction_uuid,
-            "merchant_id": merchant_id,
+            "merchant_id": "EPAYTEST",
             "signature": signature,
         }
     })
