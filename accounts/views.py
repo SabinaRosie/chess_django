@@ -231,17 +231,7 @@ def verify_otp(request):
         otp_record.is_verified = True
         otp_record.save()
 
-        # If it was a signup OTP, activate the user
-        if not user.is_active:
-            user.is_active = True
-            user.save()
-            refresh = RefreshToken.for_user(user)
-            return Response({
-                "message": "Email verified and account activated!",
-                "access": str(refresh.access_token),
-                "refresh": str(refresh)
-            })
-
+        # OTP is verified successfully
         return Response({"message": "OTP verified successfully"})
     except Exception as e:
         print(f"DEBUG: verify_otp error: {str(e)}")
