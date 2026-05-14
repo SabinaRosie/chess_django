@@ -19,9 +19,9 @@ def initiate_payment(request):
     if not amount_raw or not product_id:
         return Response({"error": "Amount and product_id are required"}, status=400)
 
-    # Format amount: if 100.0, make it 100. If 100.50, keep 100.50
+    # Format amount: Force .0 for eSewa v2 (e.g. 100 -> 100.0)
     try:
-        amount = str(int(float(amount_raw))) if float(amount_raw) == int(float(amount_raw)) else str(float(amount_raw))
+        amount = "{:.1f}".format(float(amount_raw))
     except (ValueError, TypeError):
         amount = str(amount_raw)
 
