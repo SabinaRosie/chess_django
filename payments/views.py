@@ -34,14 +34,13 @@ def initiate_payment(request):
         status='PENDING'
     )
 
-    # 🔹 eSewa v2 Signature Logic - matching the most common successful pattern
-    # No spaces, exactly these 3 fields
+    # 🔹 eSewa v2 Signature Logic
     data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code=EPAYTEST"
     
     print(f"DEBUG: Testing with string: [{data_string}]")
     
-    # Common sandbox secret key
-    secret_key = "8g8M8m8P8p8P8m8M"
+    # Trying the alternative sandbox secret key
+    secret_key = "ese_secret_key"
     key = secret_key.encode('utf-8')
     message_bytes = data_string.encode('utf-8')
     
