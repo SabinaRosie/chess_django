@@ -47,6 +47,10 @@ CSRF_TRUSTED_ORIGINS = [
     'https://manikadahal-sabina-chess.hf.space',
 ]
 
+# Proxy settings for Hugging Face Spaces
+USE_X_FORWARDED_HOST = True
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # Application definition
 
