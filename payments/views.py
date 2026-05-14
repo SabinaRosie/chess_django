@@ -43,7 +43,9 @@ def initiate_payment(request):
     
     print(f"DEBUG: eSewa Signature String: [{data_string}]")
     
-    key = settings.ESEWA_SECRET_KEY.encode('utf-8')
+    key_str = settings.ESEWA_SECRET_KEY
+    print(f"DEBUG: eSewa Secret Key starts with: {key_str[:4]}...")
+    key = key_str.encode('utf-8')
     message_bytes = data_string.encode('utf-8')
     
     # Generate HMAC-SHA256 signature
