@@ -41,12 +41,16 @@ def initiate_payment(request):
     # Format: total_amount=100,transaction_uuid=uuid,product_code=EPAYTEST
     data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code={settings.ESEWA_MERCHANT_ID}"
     
+    print(f"DEBUG: eSewa Signature String: [{data_string}]")
+    
     key = settings.ESEWA_SECRET_KEY.encode('utf-8')
     message_bytes = data_string.encode('utf-8')
     
     # Generate HMAC-SHA256 signature
     hmac_sha256 = hmac.new(key, message_bytes, hashlib.sha256).digest()
     signature = base64.b64encode(hmac_sha256).decode('utf-8')
+    
+    print(f"DEBUG: eSewa Signature Generated: [{signature}]")
 
     return Response({
         "success": True,
