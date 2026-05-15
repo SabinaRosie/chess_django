@@ -39,15 +39,28 @@ def test_signup_duplicate_fails(api_client):
 @pytest.mark.django_db
 def test_login_api_success(api_client):
     """Test successful login and token generation."""
-    User.objects.create_user(username="loginuser", password="SafePassword123!")
+    User.objects.create_user(username="loginuser", email="test@login.com", password="SafePassword123!")
     
     response = api_client.post('/api/login', {
-        "username": "loginuser",
+        "email": "test@login.com",
         "password": "SafePassword123!"
     })
     assert response.status_code == 200
     assert "access" in response.data
     assert "refresh" in response.data
+
+@pytest.mark.django_db
+def test_login_api_email_case_insensitive(api_client):
+    """Test login works regardless of email casing."""
+    User.objects.create_user(username="caseuser", email="MixedCase@Test.com", password="Password123!")
+    
+    # Login with lowercase email
+    response = api_client.post('/api/login', {
+        "email": "mixedcase@test.com",
+        "password": "Password123!"
+    })
+    assert response.status_code == 200
+    assert response.data["username"] == "caseuser"
 
 @pytest.mark.django_db
 def test_forgot_password_and_reset_flow(api_client):

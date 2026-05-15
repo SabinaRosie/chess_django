@@ -101,7 +101,7 @@ def signup(request):
         if User.objects.filter(username=username).exists():
             return Response({"error": "Username already exists"}, status=400)
 
-        if User.objects.filter(email=email).exists():
+        if User.objects.filter(email__iexact=email).exists():
             return Response({"error": "Email already exists"}, status=400)
 
         # Create active user (verification removed)
@@ -141,7 +141,7 @@ def login(request):
         # 1. Try to find user by email first (Professional approach)
         user = None
         try:
-            user_obj = User.objects.get(email=email_or_username)
+            user_obj = User.objects.get(email__iexact=email_or_username)
             user = authenticate(username=user_obj.username, password=password)
         except (User.DoesNotExist, User.MultipleObjectsReturned):
             # 2. Fallback to traditional username authentication
