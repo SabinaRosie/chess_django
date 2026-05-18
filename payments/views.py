@@ -104,7 +104,7 @@ def verify_payment(request):
         return Response({"error": "Transaction not found"}, status=404)
 
     if transaction.status == 'COMPLETE':
-        profile = request.user.profile
+        profile, _ = UserProfile.objects.get_or_create(user=request.user)
         return Response({"success": True, "message": "Already processed", "coins": profile.coins})
 
     # 4. Success! Update Transaction and Add Coins
@@ -115,7 +115,7 @@ def verify_payment(request):
     # Rule: 1 NPR = 10 Coins
     coins_to_add = int(float(total_amount) * 10)
     
-    profile = request.user.profile
+    profile, _ = UserProfile.objects.get_or_create(user=request.user)
     profile.coins += coins_to_add
     profile.save()
 
