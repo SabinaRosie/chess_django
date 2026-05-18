@@ -23,9 +23,11 @@ def initiate_payment(request):
 
     # Format amount: ensure it's a clean integer string for this test
     amount = "100"
-    transaction_uuid = f"TEST{random.randint(1000, 9999)}"
+    
+    # 🔹 eSewa v2 Signature Logic
+    transaction_uuid = f"SB-{uuid.uuid4().hex[:8].upper()}"
 
-    # Create a local Transaction record (PENDING)
+    # Create a local Transaction record (PENDING) using the correct UUID
     transaction = Transaction.objects.create(
         user=request.user,
         amount=amount,
@@ -34,13 +36,17 @@ def initiate_payment(request):
         status='PENDING'
     )
 
-    # 🔹 eSewa v2 Signature Logic
-    data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code=EPAYTEST"
+    # Sandbox secret key for eSewa v2 is 8g8M97E2Y2nuMC42
+    secret_key = "8g8M97E2Y2nuMC42"
     
-    print(f"DEBUG: Testing with string: [{data_string}]")
+    # Let's try 100.0 (one decimal) as it's common for eSewa v2
+    amount = "100.0"
+    product_code = "EPAYTEST"
+
+    data_string = f"total_amount={amount},transaction_uuid={transaction_uuid},product_code={product_code}"
     
-    # Trying the alternative sandbox secret key
-    secret_key = "ese_secret_key"
+    print(f"DEBUG: Data String to Sign: [{data_string}]")
+    
     key = secret_key.encode('utf-8')
     message_bytes = data_string.encode('utf-8')
     
@@ -56,7 +62,7 @@ def initiate_payment(request):
             "amount": amount,
             "product_id": product_id,
             "transaction_uuid": transaction_uuid,
-            "merchant_id": "EPAYTEST",
+            "merchant_id": product_code,
             "signature": signature,
         }
     })
