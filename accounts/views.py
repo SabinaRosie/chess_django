@@ -573,33 +573,17 @@ def end_call(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_turn_credentials(request):
-    """Generate ephemeral TURN credentials using HMAC-SHA1 shared secret.
-    Uses Metered Open Relay's static auth (no signup required).
-    Credentials are valid for 24 hours.
+    """Generate TURN credentials.
+    Uses Metered Open Relay's static auth (no signup required) 
+    as the dynamic HMAC method is often rate-limited or rejected by public relays.
     """
-    import hmac
-    import hashlib
-    import base64
-    import time
-
-    # 🔹 Generate Dynamic Temporal Credentials (HMAC-SHA1)
-    # This is significantly more robust for bypassing firewalls on restricted networks.
-    turn_secret = 'openrelayprojectsecret'
     
-    # Expiry set to 24 hours from now
-    expiry_time = int(time.time()) + 86400
-    username = f"{expiry_time}:openrelayproject"
-    
-    # Generate the secure temporal credential hash
-    digest = hmac.new(
-        turn_secret.encode('utf-8'),
-        username.encode('utf-8'),
-        hashlib.sha1
-    ).digest()
-    credential = base64.b64encode(digest).decode('utf-8')
+    # 🔹 Static Credentials for Metered OpenRelay
+    username = 'openrelayproject'
+    credential = 'openrelayproject'
 
     ice_servers = [
-        # 🔹 TURN Servers (Relay) - HIGH PRIORITY for cross-network
+        # 🔹 TURN Servers (Relay) - HIGH PRIORITY for cross-network (Different WiFi)
         {
             'urls': [
                 'turn:openrelay.metered.ca:80',
