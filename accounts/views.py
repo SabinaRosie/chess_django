@@ -372,6 +372,26 @@ def create_call(request):
             }
         )
 
+        # 🔹 Trigger FCM push notification for background/terminated wake-up
+        try:
+            from .fcm_utils import send_push_notification
+            fcm_data = {
+                'type': 'incoming_call',
+                'room_id': str(room.room_id),
+                'caller': request.user.username,
+                'call_type': call_type,
+            }
+            send_push_notification(
+                user=callee,
+                title=f"Incoming {call_type.capitalize()} Call",
+                body=f"{request.user.username} is calling you",
+                data=fcm_data,
+                channel_id='high_importance_channel'
+            )
+            print(f"FCM: Sent call notification to {callee.username} from {request.user.username}")
+        except Exception as fcm_err:
+            print(f"FCM Warning in create_call: {fcm_err}")
+
         return Response({
             "room_id": str(room.room_id),
             "caller": request.user.username,
@@ -583,26 +603,7 @@ def get_turn_credentials(request):
     credential = 'openrelayproject'
 
     ice_servers = [
-        # 🔹 TURN Servers (Relay) - HIGH PRIORITY for cross-network (Different WiFi)
-        {
-            'urls': [
-                'turn:openrelay.metered.ca:80',
-                'turn:openrelay.metered.ca:443',
-                'turn:openrelay.metered.ca:3478',
-            ],
-            'username': username,
-            'credential': credential,
-        },
-        {
-            'urls': [
-                'turns:openrelay.metered.ca:443?transport=tcp',
-                'turns:openrelay.metered.ca:3478?transport=tcp',
-            ],
-            'username': username,
-            'credential': credential,
-        },
-
-        # 🔹 STUN Servers (Discovery)
+        # 🔹 STUN Servers (Discovery) - Priority Order
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
@@ -612,9 +613,37 @@ def get_turn_credentials(request):
         {'urls': 'stun:stun.services.mozilla.com'},
         {'urls': 'stun:stun.voiparound.com:3478'},
         {'urls': 'stun:stun.stunprotocol.org:3478'},
+
+        # 🔹 TURN Servers (Relay) - Each listed separately for widest mobile WebRTC client compatibility
+        {
+            'urls': 'turn:openrelay.metered.ca:80',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': 'turn:openrelay.metered.ca:443',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': 'turn:openrelay.metered.ca:3478',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': 'turns:openrelay.metered.ca:443?transport=tcp',
+            'username': username,
+            'credential': credential,
+        },
+        {
+            'urls': 'turns:openrelay.metered.ca:3478?transport=tcp',
+            'username': username,
+            'credential': credential,
+        },
     ]
 
     return Response({'ice_servers': ice_servers})
+
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
