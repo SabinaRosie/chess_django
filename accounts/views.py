@@ -594,11 +594,46 @@ def end_call(request):
 @permission_classes([IsAuthenticated])
 def get_turn_credentials(request):
     """Generate TURN credentials.
-    Uses Metered Open Relay's static auth (no signup required) 
-    as the dynamic HMAC method is often rate-limited or rejected by public relays.
+    If settings.METERED_API_KEY is configured, fetches dynamically from Metered.ca
+    to get active, personal TURN relay configurations.
+    Otherwise, falls back to public STUN servers and Open Relay project credentials.
     """
-    
-    # 🔹 Static Credentials for Metered OpenRelay
+    api_key = getattr(settings, 'METERED_API_KEY', '')
+    if api_key:
+        try:
+            print(f"DEBUG: Fetching dynamic TURN credentials using METERED_API_KEY...")
+            # Fetch from Metered.ca TURN credentials API
+            # Response is a list of server configurations
+            resp = http_requests.get(
+                f"https://metered.ca/api/v1/turn/credentials?apiKey={api_key}",
+                timeout=5
+            )
+            if resp.status_code == 200:
+                metered_servers = resp.json()
+                if isinstance(metered_servers, list):
+                    # Combine public STUN servers with the retrieved TURN configurations
+                    # this ensures both excellent STUN connection discovery and reliable TURN relaying
+                    ice_servers = [
+                        {'urls': 'stun:stun.l.google.com:19302'},
+                        {'urls': 'stun:stun1.l.google.com:19302'},
+                        {'urls': 'stun:stun2.l.google.com:19302'},
+                        {'urls': 'stun:stun3.l.google.com:19302'},
+                        {'urls': 'stun:stun4.l.google.com:19302'},
+                        {'urls': 'stun:stun.cloudflare.com:3478'},
+                        {'urls': 'stun:stun.services.mozilla.com'},
+                    ]
+                    # Append metered server configurations (they have urls, username, and credential)
+                    ice_servers.extend(metered_servers)
+                    print(f"DEBUG: Successfully fetched and returned {len(metered_servers)} TURN servers from Metered.ca")
+                    return Response({'ice_servers': ice_servers})
+                else:
+                    print(f"WARNING: Metered.ca API returned invalid format: {resp.text}")
+            else:
+                print(f"WARNING: Metered.ca API failed with status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"ERROR: Exception while fetching Metered TURN credentials: {str(e)}")
+
+    # 🔹 Static Fallback Credentials (if API key not set or request failed)
     username = 'openrelayproject'
     credential = 'openrelayproject'
 
@@ -643,6 +678,7 @@ def get_turn_credentials(request):
     ]
 
     return Response({'ice_servers': ice_servers})
+
 
 
 @api_view(['POST'])
