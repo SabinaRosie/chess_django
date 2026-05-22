@@ -12,3 +12,5 @@ channels
 daphne
 firebase-admin
 drf-yasg
+cloudinary
+django-cloudinary-storage

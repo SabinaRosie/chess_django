@@ -69,6 +69,9 @@ INSTALLED_APPS = [
     'channels',
     'accounts',
     'payments',
+    'media',
+    'cloudinary_storage',
+    'cloudinary',
     'drf_yasg',
 ]
 
@@ -165,7 +168,7 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 
 STORAGES = {
     "default": {
-        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "BACKEND": "cloudinary_storage.storage.VideoMediaCloudinaryStorage",
     },
     "staticfiles": {
         "BACKEND": "whitenoise.storage.CompressedManifestStaticFilesStorage",
@@ -223,3 +226,10 @@ METERED_API_KEY = os.environ.get('METERED_API_KEY', '')
 ESEWA_MERCHANT_ID = os.environ.get('ESEWA_MERCHANT_ID', 'EPAYTEST')
 ESEWA_SECRET_KEY = os.environ.get('ESEWA_SECRET_KEY', '8g8M8m8P8p8P8m8M')
 ESEWA_VERIFY_URL = "https://rc-epay.esewa.com.np/api/epay/main/v2/form/verification"
+
+# Cloudinary Configuration
+CLOUDINARY_STORAGE = {
+    'CLOUD_NAME': os.environ.get('CLOUDINARY_CLOUD_NAME', 'drxgymnwa'),
+    'API_KEY': os.environ.get('CLOUDINARY_API_KEY', ''),
+    'API_SECRET': os.environ.get('CLOUDINARY_API_SECRET', ''),
+}
