@@ -5,6 +5,7 @@ from .models import GameVideo, VideoComment, VideoReaction
 class GameVideoAdmin(admin.ModelAdmin):
     list_display = ('title', 'duration', 'views', 'created_at')
     search_fields = ('title', 'description')
+    readonly_fields = ('duration', 'file_size', 'views')
 
 @admin.register(VideoComment)
 class VideoCommentAdmin(admin.ModelAdmin):
