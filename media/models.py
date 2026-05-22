@@ -7,7 +7,7 @@ class GameVideo(models.Model):
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
     video_file = CloudinaryField('video', resource_type='video')
-    thumbnail = models.ImageField(upload_to='video_thumbnails/', null=True, blank=True)
+    thumbnail = CloudinaryField('image', null=True, blank=True)
     duration = models.IntegerField(help_text="Duration in seconds", default=0)
     file_size = models.BigIntegerField(help_text="File size in bytes", default=0)
     views = models.IntegerField(default=0)
