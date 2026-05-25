@@ -67,7 +67,15 @@ class GameVideoSerializer(serializers.ModelSerializer):
         return None
     
     def get_stream_url(self, obj):
-        return self.get_video_url(obj)
+        request = self.context.get('request')
+        if request:
+            from django.urls import reverse
+            try:
+                stream_path = reverse('stream-video', kwargs={'video_id': obj.id})
+                return request.build_absolute_uri(stream_path)
+            except Exception:
+                pass
+        return f"/api/media/videos/{obj.id}/stream/video.mp4"
 
     def get_reaction_counts(self, obj):
         from django.db.models import Count
