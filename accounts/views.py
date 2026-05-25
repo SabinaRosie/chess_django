@@ -593,15 +593,26 @@ def end_call(request):
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_turn_credentials(request):
-    """Generate TURN credentials.
-    Uses the active Metered TURN credentials for sabina-chess.metered.live
+    """Generate TURN credentials dynamically.
+    Fetches temporary TURN credentials using the Metered REST API if METERED_API_KEY is set.
     """
-    username = '709362ac5e79d7848563aaba'
-    credential = '9kwUXSQwK6gbOJMm'
     domain = 'sabina-chess.metered.live'
+    api_key = getattr(settings, 'METERED_API_KEY', None)
 
+    if api_key:
+        try:
+            # Fetch dynamic credentials from Metered API
+            resp = http_requests.get(f"https://{domain}/api/v1/turn/credentials?apiKey={api_key}", timeout=5)
+            if resp.status_code == 200:
+                # Metered returns exactly the array of ICE servers we need to pass to the client
+                return Response({'ice_servers': resp.json()})
+            else:
+                print(f"WARNING: Failed to fetch TURN credentials, status {resp.status_code}: {resp.text}")
+        except Exception as e:
+            print(f"WARNING: Error calling Metered API: {str(e)}")
+
+    # 🔹 Fallback: Only STUN servers (TURN won't work, but it prevents the app from crashing)
     ice_servers = [
-        # 🔹 STUN Servers (Discovery) - Priority Order
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
@@ -611,33 +622,6 @@ def get_turn_credentials(request):
         {'urls': 'stun:stun.services.mozilla.com'},
         {'urls': 'stun:stun.voiparound.com:3478'},
         {'urls': 'stun:stun.stunprotocol.org:3478'},
-
-        # 🔹 TURN Servers (Relay) - Each listed separately for widest mobile WebRTC client compatibility
-        {
-            'urls': f'turn:{domain}:80',
-            'username': username,
-            'credential': credential,
-        },
-        {
-            'urls': f'turn:{domain}:443',
-            'username': username,
-            'credential': credential,
-        },
-        {
-            'urls': f'turn:{domain}:3478',
-            'username': username,
-            'credential': credential,
-        },
-        {
-            'urls': f'turns:{domain}:443?transport=tcp',
-            'username': username,
-            'credential': credential,
-        },
-        {
-            'urls': f'turns:{domain}:3478?transport=tcp',
-            'username': username,
-            'credential': credential,
-        },
     ]
 
     return Response({'ice_servers': ice_servers})
