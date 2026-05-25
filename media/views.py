@@ -248,3 +248,20 @@ def toggle_reaction(request, video_id):
         "status": "success",
         "video": serializer.data
     }, status=status.HTTP_200_OK if 'status_code' not in locals() else status_code)
+
+
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def update_video_duration(request, video_id):
+    """Update video duration (called by frontend when Cloudinary returns 0)"""
+    video = get_object_or_404(GameVideo, id=video_id)
+    duration = request.data.get('duration', 0)
+    try:
+        duration = int(float(duration))
+    except (ValueError, TypeError):
+        return Response({"error": "Invalid duration"}, status=status.HTTP_400_BAD_REQUEST)
+
+    if duration > 0 and video.duration == 0:
+        GameVideo.objects.filter(pk=video.pk).update(duration=duration)
+        return Response({"status": "updated", "duration": duration})
+    return Response({"status": "no_update_needed", "duration": video.duration})
