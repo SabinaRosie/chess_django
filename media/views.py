@@ -20,13 +20,17 @@ def list_videos(request):
         if video.video_file:
             try:
                 import cloudinary.api
-                result = cloudinary.api.resource(video.video_file.public_id, resource_type='video')
-                duration = int(result.get('duration', 0))
+                public_id = str(video.video_file)
+                print(f"Auto-heal: attempting for '{video.title}', public_id='{public_id}'")
+                result = cloudinary.api.resource(public_id, resource_type='video')
+                duration = int(float(result.get('duration', 0)))
                 file_size = result.get('bytes', 0)
+                print(f"Auto-heal: got duration={duration}, file_size={file_size}")
                 if duration > 0:
                     GameVideo.objects.filter(pk=video.pk).update(duration=duration, file_size=file_size)
+                    print(f"Auto-heal: updated '{video.title}' successfully")
             except Exception as e:
-                print(f"Auto-heal failed for '{video.title}': {e}")
+                print(f"Auto-heal failed for '{video.title}': {type(e).__name__}: {e}")
 
     videos = GameVideo.objects.all()
     serializer = GameVideoSerializer(videos, many=True, context={'request': request})
