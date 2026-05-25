@@ -20,12 +20,12 @@ class GameVideoSerializer(serializers.ModelSerializer):
     class Meta:
         model = GameVideo
         fields = [
-            'id', 'title', 'description', 'video_file', 'thumbnail',
+            'id', 'title', 'description',
             'duration', 'file_size', 'views', 'created_at', 'updated_at',
             'video_url', 'thumbnail_url', 'stream_url',
             'reaction_counts', 'user_reaction'
         ]
-        read_only_fields = ['views', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'title', 'description', 'duration', 'file_size', 'views', 'created_at', 'updated_at', 'video_url', 'thumbnail_url', 'stream_url', 'reaction_counts', 'user_reaction']
     
     def get_video_url(self, obj):
         def _harden_url(url):
