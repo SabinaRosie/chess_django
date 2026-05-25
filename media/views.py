@@ -14,6 +14,20 @@ import mimetypes
 @permission_classes([AllowAny])
 def list_videos(request):
     """List all available videos"""
+    # Auto-heal: fix videos with duration=0
+    zero_duration_videos = GameVideo.objects.filter(duration=0)
+    for video in zero_duration_videos:
+        if video.video_file:
+            try:
+                import cloudinary.api
+                result = cloudinary.api.resource(video.video_file.public_id, resource_type='video')
+                duration = int(result.get('duration', 0))
+                file_size = result.get('bytes', 0)
+                if duration > 0:
+                    GameVideo.objects.filter(pk=video.pk).update(duration=duration, file_size=file_size)
+            except Exception as e:
+                print(f"Auto-heal failed for '{video.title}': {e}")
+
     videos = GameVideo.objects.all()
     serializer = GameVideoSerializer(videos, many=True, context={'request': request})
     return Response(serializer.data)
