@@ -16,6 +16,7 @@ class GameVideoSerializer(serializers.ModelSerializer):
     stream_url = serializers.SerializerMethodField()
     reaction_counts = serializers.SerializerMethodField()
     user_reaction = serializers.SerializerMethodField()
+    comments_count = serializers.SerializerMethodField()
     
     class Meta:
         model = GameVideo
@@ -23,9 +24,9 @@ class GameVideoSerializer(serializers.ModelSerializer):
             'id', 'title', 'description',
             'duration', 'file_size', 'views', 'created_at', 'updated_at',
             'video_url', 'thumbnail_url', 'stream_url',
-            'reaction_counts', 'user_reaction'
+            'reaction_counts', 'user_reaction', 'comments_count'
         ]
-        read_only_fields = ['id', 'title', 'description', 'duration', 'file_size', 'views', 'created_at', 'updated_at', 'video_url', 'thumbnail_url', 'stream_url', 'reaction_counts', 'user_reaction']
+        read_only_fields = ['id', 'title', 'description', 'duration', 'file_size', 'views', 'created_at', 'updated_at', 'video_url', 'thumbnail_url', 'stream_url', 'reaction_counts', 'user_reaction', 'comments_count']
     
     def get_video_url(self, obj):
         def _harden_url(url):
@@ -81,3 +82,6 @@ class GameVideoSerializer(serializers.ModelSerializer):
             if reaction:
                 return reaction.reaction_type
         return None
+
+    def get_comments_count(self, obj):
+        return obj.comments.count()
