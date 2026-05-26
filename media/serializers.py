@@ -33,7 +33,7 @@ class GameVideoSerializer(serializers.ModelSerializer):
             if not url or 'video/upload/' not in url:
                 return url
             
-            safe_profile = 'w_854,h_480,c_limit,q_auto,fps_30,vc_h264:baseline:3.0,br_1m'
+            safe_profile = 'w_848,h_480,c_scale,q_auto,fps_30,vc_h264:baseline:3.1,br_1m'
             from django.conf import settings
             cloud_name = getattr(settings, 'CLOUDINARY_STORAGE', {}).get('CLOUD_NAME') or "drxgymnwa"
             base_cloud = f"https://res.cloudinary.com/{cloud_name}"
