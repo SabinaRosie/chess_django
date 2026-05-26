@@ -36,7 +36,7 @@ class GameVideoSerializer(serializers.ModelSerializer):
             safe_profile = 'w_848,h_480,c_scale,q_auto,fps_30,vc_h264:baseline:3.1,br_1m'
             from django.conf import settings
             cloud_name = getattr(settings, 'CLOUDINARY_STORAGE', {}).get('CLOUD_NAME') or "drxgymnwa"
-            base_cloud = f"https://res.cloudinary.com/{cloud_name}"
+            base_cloud = f"http://res.cloudinary.com/{cloud_name}"
             
             try:
                 delimiter = 'video/upload/'
