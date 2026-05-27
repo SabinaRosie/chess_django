@@ -2,13 +2,14 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.db.models import Q
-from .models import Conversation, ChatMessage, MessageReaction
+from ..models import Conversation, ChatMessage, MessageReaction
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q, Count
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
-from .fcm_utils import send_push_notification
+# pyrefly: ignore [missing-import]
+from ..fcm_utils import send_push_notification
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -212,7 +213,7 @@ def broadcast_reaction_update(message):
 
 def send_reaction_notification(message, sender, emoji, action):
     """Helper to send FCM for reactions."""
-    from .consumers import ChatConsumer
+    from ..consumers import ChatConsumer
     other_participants = message.conversation.participants.exclude(id=sender.id)
     title = sender.username
     if action == "added":
@@ -358,7 +359,7 @@ def forward_message(request):
 
         # 3. IMMEDIATELY Send Push Notification to other user (Synchronous)
         # Check if user is active in this chat room to suppress FCM
-        from .consumers import ChatConsumer
+        from ..consumers import ChatConsumer
         active_in_room = ChatConsumer.active_users.get(str(target_conv.id), set())
         if other_user.id not in active_in_room:
             try:

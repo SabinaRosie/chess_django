@@ -4,8 +4,9 @@ from rest_framework.response import Response
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.db.models import Q
-from .models import GameInvitation, ChessGame, FCMToken
-from .fcm_utils import send_push_notification
+from ..models import GameInvitation, ChessGame, FCMToken
+# pyrefly: ignore [missing-import]
+from ..fcm_utils import send_push_notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import random
@@ -16,7 +17,7 @@ def list_users(request):
     """List all users except the current one, with online status."""
     users = User.objects.exclude(id=request.user.id)
     # For now, let's just return basic info. If profile photo exists, use it.
-    from .consumers import NotificationConsumer
+    from ..consumers import NotificationConsumer
     
     data = []
     for user in users:

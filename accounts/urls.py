@@ -1,35 +1,37 @@
 from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
-from .views import (
-    signup, login, forgot_password, verify_otp, reset_password,
-    user_profile, logout_view, get_users, test_email,
-    create_call, check_incoming, answer_call, send_signal, get_signals, end_call,
-    get_turn_credentials, register_fcm_token, get_random_tip
-)
-from . import chat_views
-from . import game_views
+
+from .auth import views as auth_views
+from .call import views as call_views
+from .chat import views as chat_views
+from .game import views as game_views
+from .notifications import views as notifications_views
+from .tips import views as tips_views
 
 urlpatterns = [
-    path('signup', signup),
-    path('login', login),
-    path('forgot-password', forgot_password),
-    path('verify-otp', verify_otp),
-    path('reset-password', reset_password),
-    path('profile', user_profile),
-    path('logout', logout_view),
-    path('users', get_users),
+    # Auth Endpoints
+    path('signup', auth_views.signup),
+    path('login', auth_views.login),
+    path('forgot-password', auth_views.forgot_password),
+    path('verify-otp', auth_views.verify_otp),
+    path('reset-password', auth_views.reset_password),
+    path('profile', auth_views.user_profile),
+    path('logout', auth_views.logout_view),
+    path('users', auth_views.get_users),
     path('token/refresh', TokenRefreshView.as_view()),
-    path('test-email', test_email),
-    path('chess-tip', get_random_tip),
+    path('test-email', auth_views.test_email),
+    
+    # Tips Endpoints
+    path('chess-tip', tips_views.get_random_tip),
 
     # WebRTC Call Signaling
-    path('call/create', create_call),
-    path('call/check-incoming', check_incoming),
-    path('call/answer', answer_call),
-    path('call/signal', send_signal),
-    path('call/signals', get_signals),
-    path('call/end', end_call),
-    path('call/turn-credentials', get_turn_credentials),
+    path('call/create', call_views.create_call),
+    path('call/check-incoming', call_views.check_incoming),
+    path('call/answer', call_views.answer_call),
+    path('call/signal', call_views.send_signal),
+    path('call/signals', call_views.get_signals),
+    path('call/end', call_views.end_call),
+    path('call/turn-credentials', call_views.get_turn_credentials),
     
     # Chat Endpoints
     path('chat/conversations', chat_views.list_conversations),
@@ -39,7 +41,9 @@ urlpatterns = [
     path('chat/messages/<int:message_id>/reactions', chat_views.toggle_reaction),
     path('chat/messages/<int:message_id>/delete', chat_views.delete_message),
     path('chat/forward', chat_views.forward_message),
-    path('register-fcm-token', register_fcm_token),
+    
+    # Notifications
+    path('register-fcm-token', notifications_views.register_fcm_token),
 
     # Game Endpoints
     path('game/users', game_views.list_users),

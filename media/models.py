@@ -84,3 +84,23 @@ class VideoReaction(models.Model):
 
     def __str__(self):
         return f"{self.user} reacted {self.reaction_type} to {self.video}"
+
+class UserVoiceProfile(models.Model):
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="voice_profile")
+    reference_audio = models.FileField(upload_to="voice_refs/", blank=True, null=True)
+    is_trained = models.BooleanField(default=False)
+    siliconflow_voice_uri = models.CharField(max_length=256, blank=True)
+    elevenlabs_voice_id = models.CharField(max_length=256, blank=True)
+
+    def __str__(self):
+        return f"{self.user.username} voice profile"
+    
+
+class VoiceResponseCache(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    text_hash = models.CharField(max_length=64, db_index=True)
+    audio_file = models.FileField(upload_to="voice_cache/")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = ("user", "text_hash")
