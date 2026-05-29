@@ -7,6 +7,7 @@ import numpy as np
 Kokoro = None
 # Lazy import Kokoro to prevent startup crash if soundfile/libsndfile is missing on Render
 try:
+    # pyrefly: ignore [missing-import]
     from kokoro_onnx import Kokoro
 except Exception as e:
     print(f"DEBUG: Kokoro-onnx top-level import skipped/failed: {e}")
@@ -152,6 +153,7 @@ class KokoroTTSManager:
             
             # Convert float32 samples to int16 PCM for WAV
             try:
+                # pyrefly: ignore [missing-import]
                 import soundfile as sf
             except Exception as e:
                 print(f"ERROR: [Kokoro] soundfile import failed (likely missing libsndfile1 on Render): {e}", flush=True)
@@ -176,14 +178,48 @@ class VoiceAIManager:
         self.ai_mode = os.environ.get('AI_MODE', 'lightweight') # 'cloud', 'local', or 'lightweight'
         self.preferred_model = os.environ.get('LLM_MODEL', 'Qwen/Qwen2.5-0.5B-Instruct')
 
-    def generate_response(self, prompt, context=""):
+    def generate_response(self, prompt, context="", user=None, conversation_history=None):
         """Generate text response using the configured engine."""
+        from datetime import datetime
+        import pytz
+
+        # Build a rich, personalized system prompt
+        now = datetime.now(pytz.timezone('Asia/Kathmandu'))
+        time_context = now.strftime("Today is %A, %B %d, %Y. The current time is %I:%M %p (Nepal Time).")
+
+        user_context = ""
+        if user:
+            user_context = f"The user's name is {user.first_name or user.username}."
+            try:
+                profile = user.profile
+                user_context += f" They have {profile.coins} coins in the app."
+            except Exception:
+                pass
+
         system_prompt = (
-            "You are the user's digital twin. Respond in a way that sounds like the user reflecting on themselves. "
-            "Keep responses concise and empathetic."
+            f"You are {user.first_name or user.username if user else 'the user'}'s digital twin — an AI replica that thinks and talks exactly like them. "
+            f"You speak in first person as if you ARE the user reflecting on their own thoughts. "
+            f"You are warm, friendly, thoughtful, and conversational. "
+            f"{time_context} "
+            f"{user_context} "
+            f"Keep responses concise (1-3 sentences) but natural and intelligent. "
+            f"Never say you are an AI. You are the user's inner voice."
         )
 
-        # Lightweight mode (preferred for Render): Use SiliconFlow with Qwen2.5-7B (smallest available)
+        # Build message list with conversation history
+        messages = [{"role": "system", "content": system_prompt}]
+        if conversation_history:
+            for msg in conversation_history[-10:]:  # Last 10 messages for context
+                role = "user" if msg.get("is_me") else "assistant"
+                messages.append({"role": role, "content": msg.get("text", "")})
+        messages.append({"role": "user", "content": prompt})
+
+        # Prioritize Groq if available (extremely fast LPU inference)
+        if self.groq_key:
+            print(f"DEBUG: [Groq] Requesting smart chat completion", flush=True)
+            return self._groq_generate(messages)
+
+        # Lightweight mode: Use SiliconFlow with Qwen2.5-7B
         if self.ai_mode == 'lightweight':
             sf_manager = SiliconFlowManager()
             if sf_manager.api_key:
@@ -192,41 +228,38 @@ class VoiceAIManager:
                 if not error:
                     return content
                 print(f"ERROR: [SiliconFlow] LLM failed: {error}.", flush=True)
-            # If SiliconFlow fails and we're in lightweight mode, return a graceful error
-            # Do NOT fall back to Ollama as it requires a live local server
             return f"Error: AI service unavailable. Please check SILICONFLOW_API_KEY."
 
         # Cloud mode: Try Groq
         if self.ai_mode == 'cloud' and self.groq_key:
-            return self._groq_generate(prompt, system_prompt)
+            return self._groq_generate(messages)
 
         # Local mode: Use Ollama
         if self.ai_mode == 'local':
             return OllamaManager().generate_response(prompt)
 
-        # Default: if no mode matches, use Groq or graceful error
+        # Default
         if self.groq_key:
-            return self._groq_generate(prompt, system_prompt)
+            return self._groq_generate(messages)
         return "Error: No AI service configured. Please set SILICONFLOW_API_KEY or GROQ_API_KEY."
 
-    def _groq_generate(self, prompt, system_prompt):
-        """Generate using Groq API with llama-3.2-1b-preview (smallest available on Groq)."""
+    def _groq_generate(self, messages):
+        """Generate using Groq API with a smart, fast model."""
         headers = {
             "Authorization": f"Bearer {self.groq_key}",
             "Content-Type": "application/json"
         }
+        
         data = {
-            "model": "llama-3.2-1b-preview",  # Smallest available model on Groq
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": prompt}
-            ],
+            "model": "llama-3.3-70b-versatile",  # Smart and still very fast on Groq LPU
+            "messages": messages,
             "temperature": 0.7,
             "max_tokens": 150
         }
         try:
-            print(f"DEBUG: [Groq] Requesting response for prompt: {prompt[:50]}...", flush=True)
-            response = requests.post(self.GROQ_API_URL, headers=headers, json=data)
+            user_msg = messages[-1]["content"] if messages else "?"
+            print(f"DEBUG: [Groq] Requesting response for prompt: {user_msg[:50]}...", flush=True)
+            response = requests.post(self.GROQ_API_URL, headers=headers, json=data, timeout=15)
             if response.status_code != 200:
                 print(f"ERROR: Groq API Error {response.status_code}: {response.text}", flush=True)
                 return f"Error: Groq API Error {response.status_code}"

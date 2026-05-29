@@ -100,6 +100,7 @@ def chat_with_self(request):
     print(f"DEBUG: [VOICE] chat_with_self called by {request.user.username}", flush=True)
     user = request.user
     message = request.data.get('message', '').strip()
+    skip_cache = request.data.get('skip_cache', False)
     
     if not message:
         return Response({"error": "No message provided"}, status=400)
@@ -119,8 +120,13 @@ def chat_with_self(request):
         xtts_manager = CoquiXTTSManager()
         kokoro_manager = KokoroTTSManager()
 
-        # 2. Generate text response
-        response_text = ai_manager.generate_response(message)
+        # 2. Generate text response with user context and conversation history
+        conversation_history = request.data.get('conversation_history', [])
+        response_text = ai_manager.generate_response(
+            message, 
+            user=user, 
+            conversation_history=conversation_history
+        )
         
         if response_text.startswith("Error"):
             print(f"ERROR: AI Generation failed: {response_text}", flush=True)
@@ -134,26 +140,64 @@ def chat_with_self(request):
         if cache_entry:
             print(f"DEBUG: Cache hit for message hash {text_hash}", flush=True)
             audio_url = cache_entry.audio_file.url
+            if audio_url and audio_url.startswith("http://"):
+                audio_url = audio_url.replace("http://", "https://", 1)
         else:
-            # Prioritize Kokoro for lightweight mode or as high-efficiency local fallback
-            if ai_manager.ai_mode == 'lightweight':
-                print(f"DEBUG: [Kokoro] Attempting lightweight synthesis", flush=True)
-                audio_content, synth_error = kokoro_manager.synthesize(response_text)
-                if audio_content:
-                    print(f"DEBUG: [Kokoro] Synthesis success", flush=True)
-                else:
-                    print(f"ERROR: [Kokoro] Lightweight synthesis failed: {synth_error}. Trying SiliconFlow TTS...", flush=True)
-                    # Kokoro is unavailable on Render (model files not downloaded) — use SiliconFlow CosyVoice
-                    if profile.siliconflow_voice_uri or profile.reference_audio:
-                        voice_id = profile.siliconflow_voice_uri or profile.reference_audio.url
-                        audio_content, sf_error = sf_manager.zero_shot_tts(response_text, voice_id)
-                        if sf_error:
-                            synth_error = f"Kokoro: {synth_error} | SiliconFlow TTS: {sf_error}"
-                            print(f"ERROR: [SiliconFlow TTS] Failed: {sf_error}", flush=True)
-                        else:
-                            print(f"DEBUG: [SiliconFlow TTS] Synthesis success", flush=True)
+            if skip_cache:
+                print("DEBUG: Live call mode. Skipping Cloudinary upload later.", flush=True)
+
+            # 1. Prioritize SiliconFlow CosyVoice only if not fast live call
+            if not audio_content and (profile.siliconflow_voice_uri or profile.reference_audio):
+                if not profile.siliconflow_voice_uri and profile.reference_audio:
+                    try:
+                        print("DEBUG: [SiliconFlow] Voice URI missing, attempting auto-cloning...", flush=True)
+                        ref_response = requests.get(profile.reference_audio.url, timeout=30)
+                        if ref_response.status_code == 200:
+                            training_text = "Hello, I am training my digital assistant in the Chess Mobile App."
+                            uri, upload_err = sf_manager.upload_voice(
+                                ref_response.content,
+                                f"user_{user.id}_{uuid.uuid4().hex[:8]}",
+                                training_text
+                            )
+                            if uri:
+                                profile.siliconflow_voice_uri = uri
+                                profile.save()
+                                print(f"DEBUG: [SiliconFlow] Auto-cloning success: {uri}", flush=True)
+                            else:
+                                print(f"ERROR: [SiliconFlow] Auto-cloning upload failed: {upload_err}", flush=True)
+                    except Exception as e:
+                        print(f"ERROR: [SiliconFlow] Auto-cloning failed: {str(e)}", flush=True)
+
+                if profile.siliconflow_voice_uri:
+                    print(f"DEBUG: [SiliconFlow TTS] Requesting speech synthesis", flush=True)
+                    audio_content, sf_error = sf_manager.zero_shot_tts(response_text, profile.siliconflow_voice_uri)
+                    if sf_error:
+                        synth_error = f"SiliconFlow TTS Error: {sf_error}"
+                        print(f"ERROR: [SiliconFlow TTS] Failed: {sf_error}", flush=True)
                     else:
-                        synth_error = f"Kokoro failed and no voice profile found for SiliconFlow TTS."
+                        print(f"DEBUG: [SiliconFlow TTS] Synthesis success", flush=True)
+
+            # 2. Fallback: Kokoro local TTS (still sounds decent)
+            if not audio_content:
+                print(f"DEBUG: [Kokoro] Attempting fallback synthesis", flush=True)
+                audio_content, kokoro_error = kokoro_manager.synthesize(response_text)
+                if audio_content:
+                    print(f"DEBUG: [Kokoro] Fallback synthesis success", flush=True)
+                else:
+                    synth_error = f"{synth_error or ''} | Kokoro Fallback: {kokoro_error}"
+
+            # 3. Last resort: gTTS (robotic but functional)
+            if not audio_content:
+                print(f"DEBUG: [gTTS] Last resort fallback synthesis", flush=True)
+                try:
+                    from gtts import gTTS
+                    import io
+                    tts = gTTS(text=response_text, lang='en')
+                    fp = io.BytesIO()
+                    tts.write_to_fp(fp)
+                    audio_content = fp.getvalue()
+                except Exception as e:
+                    synth_error = f"{synth_error or ''} | gTTS Fallback Error: {e}"
 
             # Only try XTTS if we're NOT in lightweight mode and have a configured server
             if not audio_content and ai_manager.ai_mode != 'lightweight':
@@ -175,25 +219,34 @@ def chat_with_self(request):
             if not audio_content and ai_manager.ai_mode != 'local' and profile.elevenlabs_voice_id:
                 audio_content, synth_error = ai_manager.text_to_speech(response_text, profile.elevenlabs_voice_id)
             
+        audio_base64 = None
         if audio_content:
-            # Save to Cloudinary for caching
-            filename = f"voice_{user.id}_{uuid.uuid4().hex}.mp3"
-            # Use SimpleUploadedFile to avoid 'can't adapt type ContentFile' error with psycopg2/Cloudinary
-            audio_file = SimpleUploadedFile(filename, audio_content, content_type="audio/mpeg")
-            
-            new_cache = VoiceResponseCache.objects.create(
-                user=user,
-                text_hash=text_hash,
-                audio_file=audio_file
-            )
-            audio_url = new_cache.audio_file.url
+            if skip_cache:
+                print("DEBUG: Skipping Cloudinary upload, returning base64 audio", flush=True)
+                import base64
+                audio_base64 = base64.b64encode(audio_content).decode('utf-8')
+            else:
+                # Save to Cloudinary for caching
+                filename = f"voice_{user.id}_{uuid.uuid4().hex}.mp3"
+                # Use SimpleUploadedFile to avoid 'can't adapt type ContentFile' error with psycopg2/Cloudinary
+                audio_file = SimpleUploadedFile(filename, audio_content, content_type="audio/mpeg")
+                
+                new_cache = VoiceResponseCache.objects.create(
+                    user=user,
+                    text_hash=text_hash,
+                    audio_file=audio_file
+                )
+                audio_url = new_cache.audio_file.url
+                if audio_url and audio_url.startswith("http://"):
+                    audio_url = audio_url.replace("http://", "https://", 1)
 
         return Response({
             "text": response_text,
             "audio_url": audio_url,
+            "audio_base64": audio_base64,
             "audio_id": audio_url,
             "is_cached": cache_entry is not None,
-            "error": synth_error if not audio_url else None
+            "error": synth_error if not (audio_url or audio_base64) else None
         })
     except Exception as e:
         print(f"CRITICAL: Unhandled error in chat_with_self: {str(e)}", flush=True)
