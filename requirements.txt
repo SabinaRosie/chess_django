@@ -15,3 +15,6 @@ drf-yasg
 cloudinary
 django-cloudinary-storage
 Pillow
+numpy
+pytz
+gtts
