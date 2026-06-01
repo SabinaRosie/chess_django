@@ -43,6 +43,18 @@ class CallRoom(models.Model):
     def __str__(self):
         return f"{self.caller.username} -> {self.callee.username} ({self.call_type})"
 
+class RecordedCall(models.Model):
+    caller = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='recorded_calls_made')
+    callee = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='recorded_calls_received')
+    date_time = models.DateTimeField(auto_now_add=True)
+    recording_file = models.FileField(upload_to='call_recordings/', null=True, blank=True)
+    call_type = models.CharField(max_length=50, default='unknown')
+
+    def __str__(self):
+        caller_name = self.caller.username if self.caller else "Unknown"
+        callee_name = self.callee.username if self.callee else "Unknown"
+        return f"{caller_name} - {callee_name} ({self.date_time})"
+
 
 class CallSignal(models.Model):
     SIGNAL_TYPES = [
