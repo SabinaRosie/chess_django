@@ -43,10 +43,15 @@ def upload_voice_samples(request):
         # Training text is known from the Flutter UI instructions
         training_text = "Hello, I am training my digital assistant in the Chess Mobile App."
         
+        # Detect if it's actually a wav file from the filename
+        filename = getattr(audio_files[0], 'name', '').lower()
+        is_wav = filename.endswith('.wav')
+
         uri, error = sf_manager.upload_voice(
             audio_content, 
             f"user_{user.id}_{uuid.uuid4().hex[:8]}", 
-            training_text
+            training_text,
+            is_wav=is_wav
         )
         if uri:
             profile.siliconflow_voice_uri = uri
@@ -154,10 +159,12 @@ def chat_with_self(request):
                         ref_response = requests.get(profile.reference_audio.url, timeout=30)
                         if ref_response.status_code == 200:
                             training_text = "Hello, I am training my digital assistant in the Chess Mobile App."
+                            is_wav = profile.reference_audio.url.lower().endswith('.wav')
                             uri, upload_err = sf_manager.upload_voice(
                                 ref_response.content,
                                 f"user_{user.id}_{uuid.uuid4().hex[:8]}",
-                                training_text
+                                training_text,
+                                is_wav=is_wav
                             )
                             if uri:
                                 profile.siliconflow_voice_uri = uri
