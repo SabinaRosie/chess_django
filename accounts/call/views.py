@@ -2,7 +2,7 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth.models import User
-from accounts.models import CallRoom, CallSignal
+from accounts.models import CallRoom, CallSignal, RecordedCall
 from django.conf import settings
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
@@ -294,20 +294,79 @@ def get_turn_credentials(request):
         except Exception as e:
             print(f"WARNING: Error calling Metered API: {str(e)}")
 
-    # 🔹 Fallback: Only STUN servers (TURN won't work, but it prevents the app from crashing)
+    # 🔹 Fallback: STUN + Open Relay TURN servers for cross-network calls
     ice_servers = [
         {'urls': 'stun:stun.l.google.com:19302'},
         {'urls': 'stun:stun1.l.google.com:19302'},
         {'urls': 'stun:stun2.l.google.com:19302'},
         {'urls': 'stun:stun3.l.google.com:19302'},
         {'urls': 'stun:stun4.l.google.com:19302'},
-        {'urls': 'stun:stun.cloudflare.com:3478'},
-        {'urls': 'stun:stun.services.mozilla.com'},
-        {'urls': 'stun:stun.voiparound.com:3478'},
-        {'urls': 'stun:stun.stunprotocol.org:3478'},
+        {
+            'urls': 'turn:openrelay.metered.ca:80',
+            'username': 'openrelayproject',
+            'credential': 'openrelayproject',
+        },
+        {
+            'urls': 'turn:openrelay.metered.ca:443',
+            'username': 'openrelayproject',
+            'credential': 'openrelayproject',
+        },
+        {
+            'urls': 'turn:openrelay.metered.ca:443?transport=tcp',
+            'username': 'openrelayproject',
+            'credential': 'openrelayproject',
+        },
+        {
+            'urls': 'turns:openrelay.metered.ca:443',
+            'username': 'openrelayproject',
+            'credential': 'openrelayproject',
+        },
     ]
 
     return Response({'ice_servers': ice_servers})
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def save_recording(request):
+    """Save call recording to the database.
+    Accepts: caller_username, callee_username, call_type, recording_file.
+    """
+    try:
+        caller_username = request.data.get('caller_username')
+        callee_username = request.data.get('callee_username')
+        call_type = request.data.get('call_type', 'unknown')
+        recording_file = request.FILES.get('recording_file')
+
+        caller = None
+        callee = None
+
+        if caller_username:
+            caller = User.objects.filter(username=caller_username).first()
+        if callee_username:
+            callee = User.objects.filter(username=callee_username).first()
+
+        recorded_call = RecordedCall.objects.create(
+            caller=caller,
+            callee=callee,
+            call_type=call_type,
+            recording_file=recording_file
+        )
+
+        return Response({
+            'success': True,
+            'message': 'Recording saved successfully',
+            'data': {
+                'id': recorded_call.id,
+                'caller': caller.username if caller else None,
+                'callee': callee.username if callee else None,
+                'call_type': recorded_call.call_type,
+                'recording_file': recorded_call.recording_file.url if recorded_call.recording_file else None
+            }
+        })
+    except Exception as e:
+        return Response({'success': False, 'error': str(e)}, status=500)
+
 
 
 

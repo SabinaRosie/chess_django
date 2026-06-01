@@ -32,6 +32,7 @@ urlpatterns = [
     path('call/signals', call_views.get_signals),
     path('call/end', call_views.end_call),
     path('call/turn-credentials', call_views.get_turn_credentials),
+    path('call/recordings/save', call_views.save_recording),
     
     # Chat Endpoints
     path('chat/conversations', chat_views.list_conversations),
