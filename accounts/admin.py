@@ -1,4 +1,5 @@
 from django.contrib import admin
+from django.utils.html import format_html
 from .models import OTPVerification, FCMToken, RecordedCall
 
 @admin.register(OTPVerification)
@@ -14,6 +15,16 @@ class FCMTokenAdmin(admin.ModelAdmin):
 
 @admin.register(RecordedCall)
 class RecordedCallAdmin(admin.ModelAdmin):
-    list_display = ('caller', 'callee', 'date_time', 'call_type')
+    list_display = ('caller', 'callee', 'date_time', 'call_type', 'recording_link')
     search_fields = ('caller__username', 'callee__username')
     list_filter = ('date_time', 'call_type')
+    readonly_fields = ('date_time', 'recording_link')
+
+    @admin.display(description='Recording')
+    def recording_link(self, obj):
+        if obj.recording_file:
+            return format_html(
+                '<a href="{}" target="_blank" style="color:#00bfff;">▶ Play / Download</a>',
+                obj.recording_file.url
+            )
+        return '— no file —'

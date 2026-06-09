@@ -347,13 +347,27 @@ def save_recording(request):
         call_type = request.data.get('call_type', 'unknown')
         recording_file = request.FILES.get('recording_file')
 
+        print(f"[RECORDING] Received save request: caller={caller_username}, callee={callee_username}, type={call_type}, file={recording_file}")
+
+        if not recording_file:
+            print("[RECORDING] ERROR: No recording_file in request.FILES")
+            print(f"[RECORDING] FILES keys: {list(request.FILES.keys())}")
+            print(f"[RECORDING] DATA keys: {list(request.data.keys())}")
+            return Response({'success': False, 'error': 'No recording file provided'}, status=400)
+
         caller = None
         callee = None
 
         if caller_username:
             caller = User.objects.filter(username=caller_username).first()
+            if not caller:
+                print(f"[RECORDING] WARNING: caller '{caller_username}' not found in DB")
         if callee_username:
             callee = User.objects.filter(username=callee_username).first()
+            if not callee:
+                print(f"[RECORDING] WARNING: callee '{callee_username}' not found in DB")
+
+        print(f"[RECORDING] Creating RecordedCall entry: caller={caller}, callee={callee}, file_name={recording_file.name}, file_size={recording_file.size}")
 
         recorded_call = RecordedCall.objects.create(
             caller=caller,
@@ -361,6 +375,9 @@ def save_recording(request):
             call_type=call_type,
             recording_file=recording_file
         )
+
+        file_url = recorded_call.recording_file.url if recorded_call.recording_file else None
+        print(f"[RECORDING] SUCCESS: RecordedCall #{recorded_call.id} saved. URL: {file_url}")
 
         return Response({
             'success': True,
@@ -370,10 +387,13 @@ def save_recording(request):
                 'caller': caller.username if caller else None,
                 'callee': callee.username if callee else None,
                 'call_type': recorded_call.call_type,
-                'recording_file': recorded_call.recording_file.url if recorded_call.recording_file else None
+                'recording_file': file_url
             }
         })
     except Exception as e:
+        import traceback
+        print(f"[RECORDING] EXCEPTION: {e}")
+        print(traceback.format_exc())
         return Response({'success': False, 'error': str(e)}, status=500)
 
 
