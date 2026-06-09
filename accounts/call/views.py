@@ -288,7 +288,16 @@ def get_turn_credentials(request):
             resp = http_requests.get(f"https://{domain}/api/v1/turn/credentials?apiKey={api_key}", timeout=5)
             if resp.status_code == 200:
                 # Metered returns exactly the array of ICE servers we need to pass to the client
-                return Response({'ice_servers': resp.json()})
+                metered_servers = resp.json()
+                stun_servers = [
+                    {'urls': 'stun:stun.l.google.com:19302'},
+                    {'urls': 'stun:stun1.l.google.com:19302'},
+                    {'urls': 'stun:stun2.l.google.com:19302'},
+                    {'urls': 'stun:stun3.l.google.com:19302'},
+                    {'urls': 'stun:stun4.l.google.com:19302'},
+                    {'urls': 'stun:stun.cloudflare.com:3478'},
+                ]
+                return Response({'ice_servers': stun_servers + metered_servers})
             else:
                 print(f"WARNING: Failed to fetch TURN credentials, status {resp.status_code}: {resp.text}")
         except Exception as e:
