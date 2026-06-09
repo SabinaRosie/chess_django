@@ -111,11 +111,24 @@ TEMPLATES = [
 WSGI_APPLICATION = 'sabina_chess.wsgi.application'
 ASGI_APPLICATION = 'sabina_chess.asgi.application'
 
-CHANNEL_LAYERS = {
-    'default': {
-        'BACKEND': 'channels.layers.InMemoryChannelLayer',
-    },
-}
+REDIS_URL = os.environ.get('REDIS_URL')
+
+if REDIS_URL:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels_redis.core.RedisChannelLayer',
+            'CONFIG': {
+                'hosts': [REDIS_URL],
+                'expiry': 60,
+            }
+        }
+    }
+else:
+    CHANNEL_LAYERS = {
+        'default': {
+            'BACKEND': 'channels.layers.InMemoryChannelLayer',
+        },
+    }
 
 
 # Database

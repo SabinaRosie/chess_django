@@ -17,27 +17,35 @@ class CallConsumer(AsyncWebsocketConsumer):
         )
         await self.accept()
         
-        # 🔹 Track the last signal ID sent to avoid duplicates
-        self.last_sent_signal_id = 0
-        
-        # 🔹 Start background polling for cross-worker signaling
-        self.polling_task = asyncio.create_task(self.poll_new_signals())
+        # Send a connection confirmation
+        await self.send(text_data=json.dumps({
+            'type': 'connection_established',
+            'data': {'message': f'Connected to room: {self.room_id}'}
+        }))
+
+        # Notify others in the room
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                'type': 'call_signal',
+                'signal_type': 'peer_joined',
+                'data': {'message': f'Peer joined room: {self.room_id}'},
+                'sender_channel': self.channel_name
+            }
+        )
 
     async def disconnect(self, close_code):
         await self.channel_layer.group_discard(
             self.room_group_name,
             self.channel_name
         )
-        # 🔹 Stop background polling
-        if hasattr(self, 'polling_task'):
-            self.polling_task.cancel()
-
-    # 🔹 Class-level buffer for high-speed signaling (Supports Call IDs AND Game IDs)
-    # Format: { room_id: [ {type, data, sender_id, timestamp}, ... ] }
-    signal_buffer = {}
 
     async def receive(self, text_data):
-        data = json.loads(text_data)
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+
         signal_type = data.get('type')
         payload = data.get('data')
 
@@ -45,11 +53,7 @@ class CallConsumer(AsyncWebsocketConsumer):
             await self.send(text_data=json.dumps({'type': 'pong'}))
             return
 
-        # 🔹 Buffer important signals (offer, answer, candidate)
-        if signal_type in ('offer', 'answer', 'candidate'):
-            print(f"DEBUG: Received {signal_type} from {self.scope['user']} for room {self.room_id}")
-            await self.buffer_signal(signal_type, payload)
-
+        # Transparently relay the message to the group
         await self.channel_layer.group_send(
             self.room_group_name,
             {
@@ -66,89 +70,6 @@ class CallConsumer(AsyncWebsocketConsumer):
                 'type': event['signal_type'],
                 'data': event['data']
             }))
-
-    @database_sync_to_async
-    def buffer_signal(self, signal_type, data):
-        """Buffers signals in the database to ensure they are shared across all server workers."""
-        try:
-            # 🔹 Get or Create the room (Supports both Game IDs and Call IDs)
-            # We use the current user as caller/callee placeholders if creating a new one
-            room, created = CallRoom.objects.get_or_create(
-                room_id=self.room_id,
-                defaults={
-                    'caller': self.scope['user'],
-                    'callee': self.scope['user'],
-                    'status': 'active'
-                }
-            )
-            
-            # Update room fields for quick access (SDP buffering)
-            if signal_type == 'offer':
-                room.offer_sdp = data
-                room.save()
-            elif signal_type == 'answer':
-                room.answer_sdp = data
-                room.save()
-            
-            # Save the signal for full history (especially candidates)
-            CallSignal.objects.create(
-                room=room,
-                sender=self.scope['user'],
-                signal_type=signal_type,
-                data=data
-            )
-            print(f"DEBUG: Buffered {signal_type} in DB for room {self.room_id}")
-        except Exception as e:
-            print(f"Error buffering signal in DB: {e}")
-
-    async def send_buffered_signals(self):
-        """Sends new stored signals from the DB to the client."""
-        signals = await self.get_new_signals_from_db()
-        for signal in signals:
-            if signal['sender_id'] != self.scope['user'].id:
-                await self.send(text_data=json.dumps({
-                    'type': signal['type'],
-                    'data': signal['data']
-                }))
-                print(f"DEBUG: Sent buffered {signal['type']} to {self.scope['user']} (Room: {self.room_id})")
-            # Update last sent ID
-            self.last_sent_signal_id = max(self.last_sent_signal_id, signal['id'])
-
-    async def poll_new_signals(self):
-        """Periodically checks the DB for new signals (Fallback for cross-worker communication)."""
-        try:
-            while True:
-                await self.send_buffered_signals()
-                await asyncio.sleep(1.5)  # Fast enough for signaling, slow enough for DB
-        except asyncio.CancelledError:
-            pass
-
-    @database_sync_to_async
-    def get_new_signals_from_db(self):
-        try:
-            from django.utils import timezone
-            from datetime import timedelta
-            
-            room = CallRoom.objects.filter(room_id=self.room_id).first()
-            if not room:
-                return []
-                
-            # Fetch signals newer than what we've sent
-            signals = CallSignal.objects.filter(
-                room=room, 
-                id__gt=self.last_sent_signal_id,
-                created_at__gt=timezone.now() - timedelta(minutes=5)
-            ).order_by('id')
-            
-            return [{
-                'id': s.id,
-                'type': s.signal_type,
-                'data': s.data,
-                'sender_id': s.sender_id
-            } for s in signals]
-        except Exception as e:
-            print(f"Error fetching new signals from DB: {e}")
-            return []
 
 class NotificationConsumer(AsyncWebsocketConsumer):
     # Global tracking of online users: set of user_ids
