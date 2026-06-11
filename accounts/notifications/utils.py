@@ -71,7 +71,7 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
         user=user,
         title=title,
         notification_type=notification_type,
-        status='sent'
+        status='failed'
     )
     
     # Inject tracking ID into data
@@ -136,12 +136,16 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
                                 logger.info("FCM CLEANUP: Deleted stale token: %s...", bad_token[:15])
                     
                     if response.success_count > 0:
-                        success = True
+                        success = True # At least one device received it
+                        log_entry.status = 'sent'
+                        log_entry.save(update_fields=['status', 'updated_at'])
                     else:
                         logger.error("FCM FAILURE: All devices failed for %s", user.username)
                 else:
                     logger.info("FCM SUCCESS: Sent to %s (%d devices)", user.username, response.success_count)
                     success = True
+                    log_entry.status = 'sent'
+                    log_entry.save(update_fields=['status', 'updated_at'])
                 
                 if not success and attempts == 1:
                     logger.warning("FCM RETRY: First attempt failed for %s, retrying in 1s...", user.username)

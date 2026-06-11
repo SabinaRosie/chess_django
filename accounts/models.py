@@ -227,6 +227,7 @@ def save_user_profile(sender, instance, **kwargs):
 
 class NotificationLog(models.Model):
     STATUS_CHOICES = [
+        ('failed', 'Failed'),
         ('sent', 'Sent'),
         ('delivered', 'Delivered'),
         ('opened', 'Opened'),
@@ -238,7 +239,7 @@ class NotificationLog(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
     title = models.CharField(max_length=255)
     notification_type = models.CharField(max_length=50, default='general')
-    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='sent')
+    status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='failed')
     sent_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
