@@ -46,6 +46,7 @@ urlpatterns = [
     # Notifications
     path('register-fcm-token', notifications_views.register_fcm_token),
     path('notifications/track', notifications_views.track_notification),
+    path('notifications/settings', notifications_views.notification_settings),
 
     # Game Endpoints
     path('game/users', game_views.list_users),

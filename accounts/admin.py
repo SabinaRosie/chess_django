@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import OTPVerification, FCMToken, RecordedCall
+from .models import OTPVerification, FCMToken, RecordedCall, NotificationLog
 
 @admin.register(OTPVerification)
 class OTPVerificationAdmin(admin.ModelAdmin):
@@ -28,3 +28,25 @@ class RecordedCallAdmin(admin.ModelAdmin):
                 obj.recording_file.url
             )
         return '— no file —'
+
+@admin.register(NotificationLog)
+class NotificationLogAdmin(admin.ModelAdmin):
+    list_display = ('user', 'title', 'notification_type', 'colored_status', 'sent_at', 'updated_at')
+    list_filter = ('status', 'notification_type', 'sent_at')
+    search_fields = ('user__username', 'title')
+    readonly_fields = ('id', 'sent_at', 'updated_at')
+
+    @admin.display(description='Status')
+    def colored_status(self, obj):
+        colors = {
+            'sent': '#3498db',
+            'delivered': '#f39c12',
+            'opened': '#2ecc71',
+            'dismissed': '#95a5a6',
+            'blocked': '#e74c3c',
+        }
+        color = colors.get(obj.status, '#ffffff')
+        return format_html(
+            '<span style="color:{}; font-weight:bold;">{}</span>',
+            color, obj.get_status_display()
+        )
