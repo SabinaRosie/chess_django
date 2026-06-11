@@ -1,11 +1,12 @@
 import os
+import logging
 import firebase_admin
 from firebase_admin import credentials, messaging
 from django.conf import settings
 from ..models import FCMToken, NotificationLog
 
 import json
-# ...
+logger = logging.getLogger(__name__)
 FIREBASE_CREDENTIALS_PATH = os.path.join(settings.BASE_DIR, 'serviceAccountKey.json')
 
 def initialize_firebase():
@@ -19,18 +20,18 @@ def initialize_firebase():
             cred_dict = json.loads(env_creds)
             cred = credentials.Certificate(cred_dict)
             firebase_admin.initialize_app(cred)
-            print("FCM: Initialized via environment variable.")
+            logger.info("FCM: Initialized via environment variable.")
             return
         except Exception as e:
-            print(f"ERROR: Failed to parse FIREBASE_CREDENTIALS secret: {e}")
+            logger.error("FCM: Failed to parse FIREBASE_CREDENTIALS secret", exc_info=e)
 
     # 2. Try local file
     if os.path.exists(FIREBASE_CREDENTIALS_PATH):
         cred = credentials.Certificate(FIREBASE_CREDENTIALS_PATH)
         firebase_admin.initialize_app(cred)
-        print("FCM: Initialized via local file.")
+        logger.info("FCM: Initialized via local file.")
     else:
-        print("WARNING: Firebase credentials not found. Push notifications disabled.")
+        logger.warning("FCM: Firebase credentials not found. Push notifications disabled.")
 
 # Call initialization
 initialize_firebase()
@@ -62,7 +63,7 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
                 notification_type=notification_type,
                 status='blocked'
             )
-            print(f"FCM BLOCKED: '{notification_type}' blocked by {user.username} preferences.")
+            logger.info("FCM BLOCKED: '%s' blocked by %s preferences.", notification_type, user.username)
             return False
 
     # Create notification log synchronously before async sending
@@ -83,15 +84,15 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
         # Re-fetch tokens freshly to ensure we have the latest
         tokens = list(FCMToken.objects.filter(user=user).values_list('token', flat=True))
         if not tokens:
-            print(f"FCM ERROR: No tokens found for user {user.username} (ID: {user.id}). Cannot send '{title}'")
+            logger.warning("FCM: No tokens for user %s (ID: %s). Cannot send '%s'", user.username, user.id, title)
             return
 
-        print(f"FCM DEBUG: Found {len(tokens)} tokens for {user.username}. Sending '{title}'...")
+        logger.debug("FCM: Found %d token(s) for %s. Sending '%s'...", len(tokens), user.username, title)
         for i, t in enumerate(tokens):
-            print(f"  Token {i+1}: {t[:15]}...")
+            logger.debug("  Token %d: %s...", i + 1, t[:15])
 
         if not firebase_admin._apps:
-            print(f"FCM ERROR: Firebase not initialized. Cannot send to {user.username}")
+            logger.error("FCM: Firebase not initialized. Cannot send to %s", user.username)
             return
 
         # 🔹 Ensure all data values are strings (FCM requirement)
@@ -126,27 +127,27 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
                     for idx, resp in enumerate(response.responses):
                         if not resp.success:
                             error_code = getattr(resp.exception, 'code', str(resp.exception))
-                            print(f"FCM TOKEN FAILURE: Token {tokens[idx][:10]}... Error: {error_code}")
+                            logger.warning("FCM TOKEN FAILURE: Token %s... Error: %s", tokens[idx][:10], error_code)
                             
                             # Cleanup stale/invalid tokens
                             if 'invalid-registration' in str(error_code).lower() or 'not-registered' in str(error_code).lower():
                                 bad_token = tokens[idx]
                                 FCMToken.objects.filter(token=bad_token).delete()
-                                print(f"FCM CLEANUP: Deleted stale token: {bad_token[:15]}...")
+                                logger.info("FCM CLEANUP: Deleted stale token: %s...", bad_token[:15])
                     
                     if response.success_count > 0:
-                        success = True # At least one device received it
+                        success = True
                     else:
-                        print(f"FCM FAILURE: All devices failed for {user.username}")
+                        logger.error("FCM FAILURE: All devices failed for %s", user.username)
                 else:
-                    print(f"FCM SUCCESS: Sent to {user.username} ({response.success_count} devices)")
+                    logger.info("FCM SUCCESS: Sent to %s (%d devices)", user.username, response.success_count)
                     success = True
                 
                 if not success and attempts == 1:
-                    print(f"FCM RETRY: First attempt failed for {user.username}, retrying in 1s...")
+                    logger.warning("FCM RETRY: First attempt failed for %s, retrying in 1s...", user.username)
                     time.sleep(1)
             except Exception as e:
-                print(f"FCM CRITICAL ERROR for {user.username} (Attempt {attempts}): {str(e)}")
+                logger.error("FCM CRITICAL ERROR for %s (Attempt %d)", user.username, attempts, exc_info=e)
                 if attempts == 1:
                     time.sleep(1)
 

@@ -1,3 +1,4 @@
+import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -8,7 +9,7 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import requests as http_requests
 
-
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -71,9 +72,9 @@ def create_call(request):
                 data=fcm_data,
                 channel_id='high_importance_channel'
             )
-            print(f"FCM: Sent call notification to {callee.username} from {request.user.username}")
+            logger.info("CALL: FCM sent to %s from %s", callee.username, request.user.username)
         except Exception as fcm_err:
-            print(f"FCM Warning in create_call: {fcm_err}")
+            logger.warning("CALL: FCM warning in create_call", exc_info=fcm_err)
 
         return Response({
             "room_id": str(room.room_id),
@@ -299,9 +300,9 @@ def get_turn_credentials(request):
                 ]
                 return Response({'ice_servers': stun_servers + metered_servers})
             else:
-                print(f"WARNING: Failed to fetch TURN credentials, status {resp.status_code}: {resp.text}")
+                logger.warning("CALL: Failed to fetch TURN credentials, status %d: %s", resp.status_code, resp.text)
         except Exception as e:
-            print(f"WARNING: Error calling Metered API: {str(e)}")
+            logger.warning("CALL: Error calling Metered API", exc_info=e)
 
     # 🔹 Fallback: STUN + Open Relay TURN servers for cross-network calls
     ice_servers = [
@@ -347,12 +348,10 @@ def save_recording(request):
         call_type = request.data.get('call_type', 'unknown')
         recording_file = request.FILES.get('recording_file')
 
-        print(f"[RECORDING] Received save request: caller={caller_username}, callee={callee_username}, type={call_type}, file={recording_file}")
+        logger.debug("[RECORDING] Request: caller=%s, callee=%s, type=%s, file=%s", caller_username, callee_username, call_type, recording_file)
 
         if not recording_file:
-            print("[RECORDING] ERROR: No recording_file in request.FILES")
-            print(f"[RECORDING] FILES keys: {list(request.FILES.keys())}")
-            print(f"[RECORDING] DATA keys: {list(request.data.keys())}")
+            logger.error("[RECORDING] No recording_file in request.FILES. FILES=%s, DATA=%s", list(request.FILES.keys()), list(request.data.keys()))
             return Response({'success': False, 'error': 'No recording file provided'}, status=400)
 
         caller = None
@@ -361,13 +360,13 @@ def save_recording(request):
         if caller_username:
             caller = User.objects.filter(username=caller_username).first()
             if not caller:
-                print(f"[RECORDING] WARNING: caller '{caller_username}' not found in DB")
+                logger.warning("[RECORDING] caller '%s' not found in DB", caller_username)
         if callee_username:
             callee = User.objects.filter(username=callee_username).first()
             if not callee:
-                print(f"[RECORDING] WARNING: callee '{callee_username}' not found in DB")
+                logger.warning("[RECORDING] callee '%s' not found in DB", callee_username)
 
-        print(f"[RECORDING] Creating RecordedCall entry: caller={caller}, callee={callee}, file_name={recording_file.name}, file_size={recording_file.size}")
+        logger.debug("[RECORDING] Creating entry: caller=%s, callee=%s, file=%s, size=%s", caller, callee, recording_file.name, recording_file.size)
 
         recorded_call = RecordedCall.objects.create(
             caller=caller,
@@ -377,7 +376,7 @@ def save_recording(request):
         )
 
         file_url = recorded_call.recording_file.url if recorded_call.recording_file else None
-        print(f"[RECORDING] SUCCESS: RecordedCall #{recorded_call.id} saved. URL: {file_url}")
+        logger.info("[RECORDING] SUCCESS: RecordedCall #%s saved. URL: %s", recorded_call.id, file_url)
 
         return Response({
             'success': True,
@@ -392,8 +391,8 @@ def save_recording(request):
         })
     except Exception as e:
         import traceback
-        print(f"[RECORDING] EXCEPTION: {e}")
-        print(traceback.format_exc())
+        logger.error("[RECORDING] EXCEPTION", exc_info=e)
+        logger.error(traceback.format_exc())
         return Response({'success': False, 'error': str(e)}, status=500)
 
 

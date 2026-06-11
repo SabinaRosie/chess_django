@@ -1,7 +1,10 @@
+import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from accounts.models import FCMToken, NotificationLog
+
+logger = logging.getLogger(__name__)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -14,7 +17,7 @@ def register_fcm_token(request):
         return Response({"error": "token is required"}, status=400)
 
     # Update or create the token entry
-    print(f"DEBUG: Registering FCM token for user: {request.user.username} (ID: {request.user.id})")
+    logger.debug("FCM: Registering token for user: %s (ID: %s)", request.user.username, request.user.id)
     fcm_token, created = FCMToken.objects.update_or_create(
         token=token,
         defaults={
@@ -22,7 +25,7 @@ def register_fcm_token(request):
             'device_id': device_id,
         }
     )
-    print(f"DEBUG: Token registration result - Created: {created}")
+    logger.debug("FCM: Token registration result - Created: %s", created)
 
     return Response({
         "message": "Token registered successfully",

@@ -1,3 +1,4 @@
+import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,6 +11,8 @@ from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 # pyrefly: ignore [missing-import]
 from ..fcm_utils import send_push_notification
+
+logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -225,7 +228,7 @@ def send_reaction_notification(message, sender, emoji, action):
         # Check if user is active in this chat room to suppress FCM
         active_in_room = ChatConsumer.active_users.get(str(message.conversation.id), set())
         if user.id in active_in_room:
-            print(f"DEBUG: Skipping reaction FCM for {user.username} (active in chat)")
+            logger.debug("CHAT: Skipping reaction FCM for %s (active in chat)", user.username)
             continue
 
         try:
@@ -243,7 +246,7 @@ def send_reaction_notification(message, sender, emoji, action):
                 }
             )
         except Exception as e:
-            print(f"DEBUG: Reaction notification failed for {user.username}: {e}")
+            logger.warning("CHAT: Reaction notification failed for %s", user.username, exc_info=e)
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -355,7 +358,7 @@ def forward_message(request):
                 }
             )
         except Exception as e:
-            print(f"DEBUG: Global notification failed: {e}")
+            logger.warning("CHAT: Global WS notification failed", exc_info=e)
 
         # 3. IMMEDIATELY Send Push Notification to other user (Synchronous)
         # Check if user is active in this chat room to suppress FCM
@@ -377,8 +380,8 @@ def forward_message(request):
                     }
                 )
             except Exception as e:
-                print(f"FCM ERROR (Forward): {e}")
+                logger.warning("CHAT: Forward FCM failed", exc_info=e)
         else:
-            print(f"DEBUG: Skipping forward FCM for {other_user.username} as they are active in chat.")
+            logger.debug("CHAT: Skipping forward FCM for %s (active in chat)", other_user.username)
 
     return Response({"status": "success", "message_id": new_msg.id})

@@ -1,10 +1,13 @@
 import json
+import logging
 import asyncio
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from django.utils import timezone
 from .models import CallRoom, CallSignal, Conversation, ChatMessage
 from .fcm_utils import send_push_notification
+
+logger = logging.getLogger(__name__)
 
 class CallConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -179,7 +182,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         ChatConsumer.active_users[conv_id_str].add(self.user_id)
 
         await self.accept()
-        print(f"WS CONNECT: User {self.user_id} joined room {self.room_group_name}")
+        logger.debug("WS CONNECT: User %s joined room %s", self.user_id, self.room_group_name)
 
     async def disconnect(self, close_code):
         # Leave room group
@@ -195,7 +198,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             if not ChatConsumer.active_users[conv_id_str]:
                 del ChatConsumer.active_users[conv_id_str]
 
-        print(f"WS DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left room {self.room_group_name}")
+        logger.debug("WS DISCONNECT: User %s left room %s", getattr(self, 'user_id', 'unknown'), self.room_group_name)
 
     async def receive(self, text_data):
         try:
@@ -213,7 +216,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
             content = data.get('content')
             msg_type = data.get('message_type', 'text')
             reply_to_id = data.get('replied_to_id')
-            print(f"DEBUG: Receiving message from {self.scope['user'].username}: {content} (Reply to: {reply_to_id})")
+            logger.debug("WS MSG: From %s: %s (Reply to: %s)", self.scope['user'].username, content, reply_to_id)
             
             # 1. Save to DB first
             msg = await self.save_message(content, msg_type, reply_to_id)
@@ -229,7 +232,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     import asyncio
                     asyncio.create_task(self.send_fcm_notification(other_user, content, is_reply=is_reply))
                 else:
-                    print(f"DEBUG: Skipping FCM for {other_user.username} as they are active in chat.")
+                    logger.debug("WS MSG: Skipping FCM for %s (active in chat)", other_user.username)
 
             # 3. Broadcast to group
             reply_data = None
@@ -274,7 +277,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
                 )
 
     async def send_fcm_notification(self, other_user, content, is_reply=False):
-        print(f"DEBUG: Entering send_fcm_notification for user {other_user.username}...")
+        logger.debug("FCM: Sending notification to %s...", other_user.username)
         try:
             from asgiref.sync import sync_to_async
             
@@ -296,9 +299,9 @@ class ChatConsumer(AsyncWebsocketConsumer):
                     'is_reply': 'true' if is_reply else 'false'
                 }
             )
-            print(f"DEBUG: Finished calling send_push_notification for {other_user.username}")
+            logger.debug("FCM: Sent push notification to %s", other_user.username)
         except Exception as e:
-            print(f"DEBUG: ERROR in send_fcm_notification: {str(e)}")
+            logger.error("FCM: Error in send_fcm_notification for %s", other_user.username, exc_info=e)
             import traceback
             traceback.print_exc()
 
@@ -385,7 +388,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 
     async def connect(self):
         if self.scope["user"].is_anonymous:
-            print(f"GAME DEBUG: REJECTED. Anonymous user attempting to connect to game {self.scope['url_route']['kwargs']['game_id']}")
+            logger.warning("GAME: Rejected anonymous user for game %s", self.scope['url_route']['kwargs']['game_id'])
             await self.close()
             return
             
@@ -393,12 +396,12 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.room_group_name = f'game_{self.game_id}'
         self.user_id = self.scope['user'].id
         
-        print(f"GAME DEBUG: Attempting connect. Game: {self.game_id}, User: {self.user_id}")
+        logger.debug("GAME: Attempting connect. Game: %s, User: %s", self.game_id, self.user_id)
 
         # Verify player is part of the game
         is_player = await self.check_player()
         if not is_player:
-            print(f"GAME DEBUG: REJECTED. User {self.user_id} not in game {self.game_id}")
+            logger.warning("GAME: Rejected user %s — not a player in game %s", self.user_id, self.game_id)
             await self.close()
             return
 
@@ -424,7 +427,7 @@ class GameConsumer(AsyncWebsocketConsumer):
         GameConsumer.game_sessions[self.game_id][self.user_id] = self.channel_name
 
         await self.accept()
-        print(f"GAME CONNECT: User {self.user_id} joined game {self.game_id} (Reconnect: {is_reconnect})")
+        logger.info("GAME CONNECT: User %s joined game %s (Reconnect: %s)", self.user_id, self.game_id, is_reconnect)
 
         # ... send sync ...
         game_data = await self.get_game_state_data()
@@ -445,7 +448,7 @@ class GameConsumer(AsyncWebsocketConsumer):
 
         # If both players are now connected, signal game start to the GROUP
         if len(GameConsumer.game_sessions[self.game_id]) == 2:
-            print(f"GAME START: Both players connected to {self.game_id}. Sending game_start signal.")
+            logger.info("GAME START: Both players connected to %s.", self.game_id)
             await self.channel_layer.group_send(
                 self.room_group_name,
                 {
@@ -456,7 +459,7 @@ class GameConsumer(AsyncWebsocketConsumer):
                 }
             )
         else:
-            print(f"GAME CONNECT: Waiting for opponent. Current players: {len(GameConsumer.game_sessions[self.game_id])}")
+            logger.debug("GAME CONNECT: Waiting for opponent. Current players: %d", len(GameConsumer.game_sessions[self.game_id]))
 
     async def disconnect(self, close_code):
         # Leave room group
@@ -498,7 +501,7 @@ class GameConsumer(AsyncWebsocketConsumer):
                     'user_id': self.user_id
                 }
             )
-        print(f"GAME DISCONNECT: User {getattr(self, 'user_id', 'unknown')} left game {getattr(self, 'game_id', 'unknown')} (Code: {close_code})")
+        logger.info("GAME DISCONNECT: User %s left game %s (Code: %s)", getattr(self, 'user_id', 'unknown'), getattr(self, 'game_id', 'unknown'), close_code)
 
     async def receive(self, text_data):
         try:
@@ -516,7 +519,7 @@ class GameConsumer(AsyncWebsocketConsumer):
             color = await self.get_color()
             
             if (is_white_turn and color != 'white') or (not is_white_turn and color != 'black'):
-                print(f"GAME DEBUG: REJECTED MOVE. Not {color}'s turn. FEN: {current_fen}")
+                logger.warning("GAME: Rejected move — not %s's turn. FEN: %s", color, current_fen)
                 return
 
             # Broadcast move to opponent

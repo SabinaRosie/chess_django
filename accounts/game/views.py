@@ -1,3 +1,4 @@
+import logging
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -10,6 +11,8 @@ from ..fcm_utils import send_push_notification
 from asgiref.sync import async_to_sync
 from channels.layers import get_channel_layer
 import random
+
+logger = logging.getLogger(__name__)
 
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
@@ -54,7 +57,7 @@ def send_invitation(request):
         status='active'
     )
     
-    print(f"GAME DEBUG: Created game {game.id} for invitation from {request.user.username} to {receiver.username}")
+    logger.debug("GAME: Created game %s for invitation from %s to %s", game.id, request.user.username, receiver.username)
 
     invitation = GameInvitation.objects.create(
         sender=request.user,
@@ -134,7 +137,7 @@ def respond_invitation(request):
         channel_layer = get_channel_layer()
         sender_group = f'user_{invitation.sender.id}'.replace(' ', '_')
         
-        print(f"GAME DEBUG: Notifying sender. Sender Group: {sender_group}")
+        logger.debug("GAME: Notifying sender group: %s", sender_group)
  
         # Notify Sender (White)
         async_to_sync(channel_layer.group_send)(
@@ -152,7 +155,7 @@ def respond_invitation(request):
         )
 
         # 2. WebSocket signal is still needed for real-time sync if they are online
-        print(f"GAME LOG: Dispatched WebSocket 'invitation_accepted' to sender {invitation.sender.username}")
+        logger.info("GAME: Dispatched WS 'invitation_accepted' to sender %s", invitation.sender.username)
 
         # 3. Optional: Notify Receiver (Self) via FCM as well
         send_push_notification(
@@ -196,7 +199,7 @@ def respond_invitation(request):
                 data={'type': 'game_decline'}
             )
         except Exception as e:
-            print(f"DEBUG: Decline notification failed: {e}")
+            logger.warning("GAME: Decline notification failed", exc_info=e)
 
         return Response({"status": "declined"})
 
