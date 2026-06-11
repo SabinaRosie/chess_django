@@ -53,10 +53,7 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
         elif 'invitation' in notification_type and not profile.allow_invitations:
             is_blocked = True
         elif channel_id == 'high_importance_channel' and not profile.allow_sticky:
-            # For sticky/high importance notifications, downgrade or block
-            # In this case we block it if it relies on being sticky, or we downgrade it. 
-            # We'll downgrade it to normal channel so it's not sticky/intrusive.
-            channel_id = 'normal_channel'
+            is_blocked = True
             
         if is_blocked:
             NotificationLog.objects.create(
