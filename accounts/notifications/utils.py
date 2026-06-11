@@ -40,8 +40,35 @@ import threading
 def send_push_notification(user, title, body, data=None, async_send=True, channel_id='normal_channel'):
     """Send a push notification to all devices registered for a user."""
     
-    # Create notification log synchronously before async sending
     notification_type = data.get('type', 'general') if data else 'general'
+    
+    # Check user preferences
+    profile = getattr(user, 'profile', None)
+    if profile:
+        is_blocked = False
+        if notification_type == 'incoming_call' and not profile.allow_calls:
+            is_blocked = True
+        elif notification_type in ['chat_notification', 'chat'] and not profile.allow_messages:
+            is_blocked = True
+        elif 'invitation' in notification_type and not profile.allow_invitations:
+            is_blocked = True
+        elif channel_id == 'high_importance_channel' and not profile.allow_sticky:
+            # For sticky/high importance notifications, downgrade or block
+            # In this case we block it if it relies on being sticky, or we downgrade it. 
+            # We'll downgrade it to normal channel so it's not sticky/intrusive.
+            channel_id = 'normal_channel'
+            
+        if is_blocked:
+            NotificationLog.objects.create(
+                user=user,
+                title=title,
+                notification_type=notification_type,
+                status='blocked'
+            )
+            print(f"FCM BLOCKED: '{notification_type}' blocked by {user.username} preferences.")
+            return False
+
+    # Create notification log synchronously before async sending
     log_entry = NotificationLog.objects.create(
         user=user,
         title=title,

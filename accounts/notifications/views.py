@@ -53,3 +53,23 @@ def track_notification(request):
     except NotificationLog.DoesNotExist:
         return Response({"error": "Notification not found or not owned by user"}, status=404)
 
+@api_view(['GET', 'PUT'])
+@permission_classes([IsAuthenticated])
+def notification_settings(request):
+    """Get or update user notification preferences."""
+    profile = request.user.profile
+    if request.method == 'GET':
+        return Response({
+            'allow_calls': profile.allow_calls,
+            'allow_messages': profile.allow_messages,
+            'allow_invitations': profile.allow_invitations,
+            'allow_sticky': profile.allow_sticky,
+        })
+    elif request.method == 'PUT':
+        profile.allow_calls = request.data.get('allow_calls', profile.allow_calls)
+        profile.allow_messages = request.data.get('allow_messages', profile.allow_messages)
+        profile.allow_invitations = request.data.get('allow_invitations', profile.allow_invitations)
+        profile.allow_sticky = request.data.get('allow_sticky', profile.allow_sticky)
+        profile.save()
+        return Response({'message': 'Notification settings updated successfully'})
+

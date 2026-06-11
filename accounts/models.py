@@ -199,6 +199,12 @@ class ChessTip(models.Model):
 class UserProfile(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE, related_name='profile')
     coins = models.PositiveIntegerField(default=100) # Starting coins for new users
+    
+    # Notification Preferences
+    allow_calls = models.BooleanField(default=True)
+    allow_messages = models.BooleanField(default=True)
+    allow_invitations = models.BooleanField(default=True)
+    allow_sticky = models.BooleanField(default=True)
 
     def __str__(self):
         return f"{self.user.username} - {self.coins} coins"
@@ -225,6 +231,7 @@ class NotificationLog(models.Model):
         ('delivered', 'Delivered'),
         ('opened', 'Opened'),
         ('dismissed', 'Dismissed'),
+        ('blocked', 'Blocked'),
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
