@@ -583,6 +583,25 @@ class GameConsumer(AsyncWebsocketConsumer):
             )
             await self.end_game('draw')
         
+        elif action == 'video_request':
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'video_request_relay',
+                    'sender_id': self.user_id
+                }
+            )
+
+        elif action == 'video_response':
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    'type': 'video_response_relay',
+                    'sender_id': self.user_id,
+                    'accepted': data.get('accepted')
+                }
+            )
+        
         elif action == 'game_over':
             # Handle king capture signal from client
             reason = data.get('reason', 'king_captured')
@@ -640,6 +659,19 @@ class GameConsumer(AsyncWebsocketConsumer):
         if self.user_id != event['user_id']:
             await self.send(text_data=json.dumps({
                 'type': 'player_reconnected'
+            }))
+
+    async def video_request_relay(self, event):
+        if self.user_id != event['sender_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'video_request'
+            }))
+
+    async def video_response_relay(self, event):
+        if self.user_id != event['sender_id']:
+            await self.send(text_data=json.dumps({
+                'type': 'video_response',
+                'accepted': event['accepted']
             }))
 
     async def game_start(self, event):
