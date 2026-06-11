@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
-from accounts.models import FCMToken
+from accounts.models import FCMToken, NotificationLog
 
 @api_view(['POST'])
 @permission_classes([IsAuthenticated])
@@ -28,4 +28,28 @@ def register_fcm_token(request):
         "message": "Token registered successfully",
         "created": created
     })
+
+
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def track_notification(request):
+    """Track the status of a notification (delivered, opened, dismissed)."""
+    notification_id = request.data.get('notification_id')
+    status = request.data.get('status')
+
+    if not notification_id or not status:
+        return Response({"error": "notification_id and status are required"}, status=400)
+
+    # Valid statuses from models.py
+    valid_statuses = ['sent', 'delivered', 'opened', 'dismissed']
+    if status not in valid_statuses:
+        return Response({"error": "Invalid status"}, status=400)
+
+    try:
+        log_entry = NotificationLog.objects.get(id=notification_id, user=request.user)
+        log_entry.status = status
+        log_entry.save()
+        return Response({"message": f"Notification marked as {status}"})
+    except NotificationLog.DoesNotExist:
+        return Response({"error": "Notification not found or not owned by user"}, status=404)
 

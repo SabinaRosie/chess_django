@@ -2,7 +2,7 @@ import os
 import firebase_admin
 from firebase_admin import credentials, messaging
 from django.conf import settings
-from ..models import FCMToken
+from ..models import FCMToken, NotificationLog
 
 import json
 # ...
@@ -39,6 +39,20 @@ import threading
 
 def send_push_notification(user, title, body, data=None, async_send=True, channel_id='normal_channel'):
     """Send a push notification to all devices registered for a user."""
+    
+    # Create notification log synchronously before async sending
+    notification_type = data.get('type', 'general') if data else 'general'
+    log_entry = NotificationLog.objects.create(
+        user=user,
+        title=title,
+        notification_type=notification_type,
+        status='sent'
+    )
+    
+    # Inject tracking ID into data
+    if data is None:
+        data = {}
+    data['notification_id'] = str(log_entry.id)
     
     def _send():
         import time
