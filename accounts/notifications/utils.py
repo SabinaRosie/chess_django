@@ -70,7 +70,7 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
         user=user,
         title=title,
         notification_type=notification_type,
-        status='sent'
+        status='failed'
     )
     
     # Inject tracking ID into data
@@ -136,11 +136,15 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
                     
                     if response.success_count > 0:
                         success = True # At least one device received it
+                        log_entry.status = 'sent'
+                        log_entry.save(update_fields=['status', 'updated_at'])
                     else:
                         print(f"FCM FAILURE: All devices failed for {user.username}")
                 else:
                     print(f"FCM SUCCESS: Sent to {user.username} ({response.success_count} devices)")
                     success = True
+                    log_entry.status = 'sent'
+                    log_entry.save(update_fields=['status', 'updated_at'])
                 
                 if not success and attempts == 1:
                     print(f"FCM RETRY: First attempt failed for {user.username}, retrying in 1s...")

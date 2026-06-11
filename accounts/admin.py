@@ -39,6 +39,7 @@ class NotificationLogAdmin(admin.ModelAdmin):
     @admin.display(description='Status')
     def colored_status(self, obj):
         colors = {
+            'failed': '#7f8c8d',
             'sent': '#3498db',
             'delivered': '#f39c12',
             'opened': '#2ecc71',
