@@ -1,6 +1,6 @@
 from django.contrib import admin
 from django.utils.html import format_html
-from .models import OTPVerification, FCMToken, RecordedCall, NotificationLog
+from .models import OTPVerification, FCMToken, RecordedCall, NotificationLog, ClientLog
 
 @admin.register(OTPVerification)
 class OTPVerificationAdmin(admin.ModelAdmin):
@@ -51,3 +51,32 @@ class NotificationLogAdmin(admin.ModelAdmin):
             '<span style="color:{}; font-weight:bold;">{}</span>',
             color, obj.get_status_display()
         )
+
+
+@admin.register(ClientLog)
+class ClientLogAdmin(admin.ModelAdmin):
+    list_display = ('created_at', 'colored_level', 'feature', 'user', 'message_summary')
+    list_filter = ('level', 'feature', 'created_at')
+    search_fields = ('message', 'stack_trace', 'user__username', 'feature')
+    readonly_fields = ('created_at', 'user', 'level', 'feature', 'message', 'stack_trace', 'device_info')
+    date_hierarchy = 'created_at'
+
+    @admin.display(description='Level')
+    def colored_level(self, obj):
+        colors = {
+            'DEBUG': '#7f8c8d',
+            'INFO': '#2ecc71',
+            'WARNING': '#f39c12',
+            'ERROR': '#e74c3c',
+            'FATAL': '#c0392b',
+        }
+        color = colors.get(obj.level, '#ffffff')
+        return format_html(
+            '<span style="background-color:{}; color:#ffffff; padding:3px 6px; border-radius:3px; font-weight:bold;">{}</span>',
+            color, obj.level
+        )
+
+    def message_summary(self, obj):
+        return obj.message[:80] + '...' if len(obj.message) > 80 else obj.message
+    message_summary.short_description = 'Message'
+

@@ -319,3 +319,34 @@ def test_email(request):
     return Response(config)
 
 
+@api_view(['POST'])
+@permission_classes([])  # Allow any client (even unauthenticated) to submit crash reports
+def submit_client_logs(request):
+    from accounts.models import ClientLog
+    logs_data = request.data
+    
+    if not isinstance(logs_data, list):
+        logs_data = [logs_data]
+
+    logs_to_create = []
+    user = request.user if request.user.is_authenticated else None
+
+    for item in logs_data:
+        logs_to_create.append(
+            ClientLog(
+                user=user,
+                level=item.get('level', 'ERROR'),
+                feature=item.get('feature'),
+                message=item.get('message', ''),
+                stack_trace=item.get('stack_trace'),
+                device_info=item.get('device_info'),
+            )
+        )
+    
+    if logs_to_create:
+        ClientLog.objects.bulk_create(logs_to_create)
+        
+    return Response({"status": "success", "count": len(logs_to_create)}, status=201)
+
+
+

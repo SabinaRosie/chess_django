@@ -246,3 +246,34 @@ class NotificationLog(models.Model):
     def __str__(self):
         return f"{self.user.username} - {self.title} ({self.status})"
 
+
+class ClientLog(models.Model):
+    LEVEL_CHOICES = [
+        ('DEBUG', 'Debug'),
+        ('INFO', 'Info'),
+        ('WARNING', 'Warning'),
+        ('ERROR', 'Error'),
+        ('FATAL', 'Fatal'),
+    ]
+
+    user = models.ForeignKey(
+        User, 
+        on_delete=models.SET_NULL, 
+        null=True, 
+        blank=True, 
+        related_name='client_logs'
+    )
+    level = models.CharField(max_length=10, choices=LEVEL_CHOICES, default='ERROR')
+    feature = models.CharField(max_length=50, null=True, blank=True, db_index=True)
+    message = models.TextField()
+    stack_trace = models.TextField(null=True, blank=True)
+    device_info = models.JSONField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"[{self.level}] {self.feature or 'Global'} - {self.message[:50]}"
+
+

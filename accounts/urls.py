@@ -48,7 +48,11 @@ urlpatterns = [
     path('notifications/track', notifications_views.track_notification),
     path('notifications/settings', notifications_views.notification_settings),
 
+    # Client Logs
+    path('logs/submit', auth_views.submit_client_logs),
+
     # Game Endpoints
+
     path('game/users', game_views.list_users),
     path('game/invite', game_views.send_invitation),
     path('game/respond', game_views.respond_invitation),
