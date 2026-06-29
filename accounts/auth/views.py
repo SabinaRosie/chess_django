@@ -278,6 +278,26 @@ def user_profile(request):
         "coins": coins,
     })
 
+@api_view(['POST'])
+@permission_classes([IsAuthenticated])
+def claim_reward(request):
+    try:
+        from accounts.models import UserProfile
+        user = request.user
+        profile, created = UserProfile.objects.get_or_create(user=user)
+        
+        # Increase coins by 100
+        profile.coins += 100
+        profile.save()
+        
+        return Response({
+            "success": True,
+            "message": "100 coins successfully added!",
+            "coins": profile.coins,
+        })
+    except Exception as e:
+        return Response({"error": f"Failed to claim reward: {str(e)}"}, status=500)
+
 @api_view(['GET'])
 @permission_classes([IsAuthenticated])
 def get_users(request):

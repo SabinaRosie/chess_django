@@ -20,6 +20,7 @@ urlpatterns = [
     path('users', auth_views.get_users),
     path('token/refresh', TokenRefreshView.as_view()),
     path('test-email', auth_views.test_email),
+    path('reward/claim', auth_views.claim_reward),
     
     # Tips Endpoints
     path('chess-tip', tips_views.get_random_tip),
