@@ -243,7 +243,8 @@ def send_reaction_notification(message, sender, emoji, action):
                     'sender_name': sender.username,
                     'is_reaction': 'true',
                     'emoji': emoji
-                }
+                },
+                sender=sender
             )
         except Exception as e:
             logger.warning("CHAT: Reaction notification failed for %s", user.username, exc_info=e)
@@ -377,7 +378,8 @@ def forward_message(request):
                         'sender_id': str(request.user.id),
                         'sender_name': request.user.username,
                         'is_forwarded': 'true'
-                    }
+                    },
+                    sender=request.user
                 )
             except Exception as e:
                 logger.warning("CHAT: Forward FCM failed", exc_info=e)

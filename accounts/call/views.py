@@ -70,7 +70,8 @@ def create_call(request):
                 title=f"Incoming {call_type.capitalize()} Call",
                 body=f"{request.user.username} is calling you",
                 data=fcm_data,
-                channel_id='high_importance_channel'
+                channel_id='high_importance_channel',
+                sender=request.user
             )
             logger.info("CALL: FCM sent to %s from %s", callee.username, request.user.username)
         except Exception as fcm_err:

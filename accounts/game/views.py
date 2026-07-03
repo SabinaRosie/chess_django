@@ -93,7 +93,8 @@ def send_invitation(request):
             'game_id': str(game.id),
             'sender_id': str(request.user.id),
             'sender_name': request.user.username,
-        }
+        },
+        sender=request.user,
     )
 
     return Response({
@@ -169,7 +170,8 @@ def respond_invitation(request):
                 'opponent_name': str(invitation.sender.username),
                 'opponent_photo': str(getattr(invitation.sender, 'profile_photo_url', '')),
                 'color': 'black',
-            }
+            },
+            sender=invitation.sender,
         )
 
         return Response({"status": "accepted", "game_id": str(game.id)})
@@ -196,7 +198,8 @@ def respond_invitation(request):
                 invitation.sender,
                 title=request.user.username,
                 body=f"{request.user.username} declined your invitation",
-                data={'type': 'game_decline'}
+                data={'type': 'game_decline'},
+                sender=request.user,
             )
         except Exception as e:
             logger.warning("GAME: Decline notification failed", exc_info=e)
