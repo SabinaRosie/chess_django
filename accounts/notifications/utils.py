@@ -38,8 +38,12 @@ initialize_firebase()
 
 import threading
 
-def send_push_notification(user, title, body, data=None, async_send=True, channel_id='normal_channel'):
-    """Send a push notification to all devices registered for a user."""
+def send_push_notification(user, title, body, data=None, async_send=True, channel_id='normal_channel', sender=None):
+    """Send a push notification to all devices registered for a user.
+    
+    sender: the User who triggered this notification (e.g. caller, chat sender).
+            Pass None for system-generated notifications.
+    """
     
     notification_type = data.get('type', 'general') if data else 'general'
     
@@ -58,6 +62,7 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
             
         if is_blocked:
             NotificationLog.objects.create(
+                sender=sender,
                 user=user,
                 title=title,
                 notification_type=notification_type,
@@ -68,6 +73,7 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
 
     # Create notification log synchronously before async sending
     log_entry = NotificationLog.objects.create(
+        sender=sender,
         user=user,
         title=title,
         notification_type=notification_type,
@@ -138,14 +144,14 @@ def send_push_notification(user, title, body, data=None, async_send=True, channe
                     if response.success_count > 0:
                         success = True # At least one device received it
                         log_entry.status = 'sent'
-                        log_entry.save(update_fields=['status', 'updated_at'])
+                        log_entry.save(update_fields=['status', 'accepted_at'])
                     else:
                         logger.error("FCM FAILURE: All devices failed for %s", user.username)
                 else:
                     logger.info("FCM SUCCESS: Sent to %s (%d devices)", user.username, response.success_count)
                     success = True
                     log_entry.status = 'sent'
-                    log_entry.save(update_fields=['status', 'updated_at'])
+                    log_entry.save(update_fields=['status', 'accepted_at'])
                 
                 if not success and attempts == 1:
                     logger.warning("FCM RETRY: First attempt failed for %s, retrying in 1s...", user.username)

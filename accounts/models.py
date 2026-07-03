@@ -43,7 +43,7 @@ class CallRoom(models.Model):
         return self.status == 'pending' and timezone.now() > self.created_at + timedelta(minutes=2)
 
     def __str__(self):
-        return f"{self.caller.username} -> {self.callee.username} ({self.call_type})"
+        return f"Caller: {self.caller.username} → Receiver: {self.callee.username} ({self.call_type})"
 
 class RecordedCall(models.Model):
     caller = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name='recorded_calls_made')
@@ -55,7 +55,7 @@ class RecordedCall(models.Model):
     def __str__(self):
         caller_name = self.caller.username if self.caller else "Unknown"
         callee_name = self.callee.username if self.callee else "Unknown"
-        return f"{caller_name} - {callee_name} ({self.date_time})"
+        return f"Caller: {caller_name} → Received by: {callee_name} ({self.date_time})"
 
 
 class CallSignal(models.Model):
@@ -166,7 +166,7 @@ class GameInvitation(models.Model):
         return self.status == 'pending' and timezone.now() > self.created_at + timedelta(seconds=60)
 
     def __str__(self):
-        return f"{self.sender.username} -> {self.receiver.username} ({self.status})"
+        return f"Invited by: {self.sender.username} → Sent to: {self.receiver.username} [{self.status}]"
 
 
 class ChessGame(models.Model):
@@ -238,15 +238,17 @@ class NotificationLog(models.Model):
     ]
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')
+    sender = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, blank=True, related_name='sent_notifications')
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='notifications')  # recipient
     title = models.CharField(max_length=255)
     notification_type = models.CharField(max_length=50, default='general')
     status = models.CharField(max_length=15, choices=STATUS_CHOICES, default='failed')
     sent_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    accepted_at = models.DateTimeField(auto_now=True)
 
     def __str__(self):
-        return f"{self.user.username} - {self.title} ({self.status})"
+        sender_name = self.sender.username if self.sender else 'System'
+        return f"From: {sender_name} → To: {self.user.username} | {self.title} [{self.status}]"
 
 
 class ClientLog(models.Model):
