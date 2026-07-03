@@ -134,10 +134,18 @@ else:
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
+_db_url = os.environ.get('DATABASE_URL')
+if not _db_url:
+    raise RuntimeError(
+        "DATABASE_URL environment variable is not set. "
+        "Add it to your .env file pointing to your Neon PostgreSQL instance."
+    )
+
 DATABASES = {
     'default': dj_database_url.config(
-        default=f"sqlite:///{BASE_DIR / 'db.sqlite3'}",
-        conn_max_age=600
+        default=_db_url,
+        conn_max_age=600,
+        conn_health_checks=True,
     )
 }
 

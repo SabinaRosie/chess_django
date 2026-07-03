@@ -286,13 +286,21 @@ def claim_reward(request):
         user = request.user
         profile, created = UserProfile.objects.get_or_create(user=user)
         
-        # Increase coins by 100
-        profile.coins += 100
+        # Get amount from request body, default to 100
+        try:
+            amount = int(request.data.get('amount', 100))
+        except (ValueError, TypeError):
+            amount = 100
+
+        if amount <= 0 or amount > 500:
+            amount = 100
+
+        profile.coins += amount
         profile.save()
         
         return Response({
             "success": True,
-            "message": "100 coins successfully added!",
+            "message": f"{amount} coins successfully added!",
             "coins": profile.coins,
         })
     except Exception as e:
