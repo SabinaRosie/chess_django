@@ -43,15 +43,12 @@ def _send_email_brevo(to_email, subject, body):
 def _send_otp_email(user):
     otp = str(random.randint(100000, 999999))
 
-    # update_or_create to ensure one OTP per user
-    otp_record, created = OTPVerification.objects.update_or_create(
+    # Always create a new record so full OTP history is preserved
+    otp_record = OTPVerification.objects.create(
         user=user,
-        defaults={'otp': otp, 'is_verified': False}
+        otp=otp,
+        is_verified=False
     )
-
-    # If updating existing record, reset the expiry timestamp
-    if not created:
-        OTPVerification.objects.filter(pk=otp_record.pk).update(created_at=timezone.now())
 
     print(f"DEBUG: sending OTP {otp} to {user.email}")
 
@@ -215,7 +212,7 @@ def verify_otp(request):
 
             # Ensure otp is treated as string and trimmed
             otp_str = str(otp).strip()
-            otp_record = OTPVerification.objects.get(user=user, otp=otp_str)
+            otp_record = OTPVerification.objects.filter(user=user, otp=otp_str).last()
         except OTPVerification.DoesNotExist:
             return Response({"error": "Invalid OTP. Please check your email again."}, status=400)
         except Exception as e:
@@ -247,7 +244,7 @@ def reset_password(request):
             user = User.objects.filter(email__iexact=email).first()
             if not user:
                 return Response({"error": "User not found"}, status=404)
-            otp_record = OTPVerification.objects.get(user=user)
+            otp_record = OTPVerification.objects.filter(user=user, is_verified=True, used_at__isnull=True).last()
         except OTPVerification.DoesNotExist:
             return Response({"error": "No OTP verification record found for this user"}, status=400)
 
@@ -259,7 +256,9 @@ def reset_password(request):
 
         user.set_password(new_password)
         user.save()
-        otp_record.delete()
+        # Mark OTP as used — never delete so admin history is preserved
+        otp_record.used_at = timezone.now()
+        otp_record.save()
 
         return Response({"message": "Password reset successful"})
     except Exception as e:

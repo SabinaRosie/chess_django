@@ -5,17 +5,19 @@ from datetime import timedelta
 import uuid
 
 class OTPVerification(models.Model):
-    user = models.OneToOneField(User, on_delete=models.CASCADE)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name='otp_records')
     otp = models.CharField(max_length=6)
     created_at = models.DateTimeField(auto_now_add=True)
     is_verified = models.BooleanField(default=False)
+    used_at = models.DateTimeField(null=True, blank=True)  # Set when OTP is consumed
 
     def is_expired(self):
         # OTP expires after 10 minutes
         return timezone.now() > self.created_at + timedelta(minutes=10)
 
     def __str__(self):
-        return f"{self.user.username} - {self.otp}"
+        status = 'Used' if self.used_at else ('Verified' if self.is_verified else 'Pending')
+        return f"{self.user.username} - {self.otp} [{status}]"
 
 
 class CallRoom(models.Model):
