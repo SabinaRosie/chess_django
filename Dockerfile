@@ -25,10 +25,7 @@ COPY . /app/
 # Create staticfiles directory
 RUN mkdir -p /app/staticfiles
 
-# Collect static files
-RUN python manage.py collectstatic --noinput
-
 # Expose the port
 EXPOSE 7860
 
-CMD ["sh", "-c", "python manage.py migrate && daphne --access-log - -b 0.0.0.0 -p 7860 sabina_chess.asgi:application"]
+CMD ["sh", "-c", "python manage.py collectstatic --noinput && python manage.py migrate && daphne --access-log - -b 0.0.0.0 -p 7860 sabina_chess.asgi:application"]
